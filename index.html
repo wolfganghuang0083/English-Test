@@ -768,7 +768,14 @@ function srErrorMsg(err){
 
 /* ---------------- 帳號、學習紀錄、雲端同步 ---------------- */
 const CFG = window.APP_CONFIG || {};
-const API = String(CFG.apiUrl || '').trim();
+const API_RE = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
+const API = (() => {
+  try {   // 也可以用 ?api=後台網址 帶入（設定頁會產生這種網址）
+    const q = new URL(location.href).searchParams.get('api');
+    if (q && API_RE.test(q)) store.set('apiUrl', q);
+  } catch(e){}
+  return String(CFG.apiUrl || '').trim() || store.get('apiUrl', '') || '';
+})();
 let session = store.get('session', null);   // {id, pass, name, cls, role, mode:'cloud'|'local'}
 let progress = {};                           // {單字key: {r:答對, w:答錯, s:連續答對, t:時間}}
 const isCloud = () => !!(session && session.mode === 'cloud' && API);

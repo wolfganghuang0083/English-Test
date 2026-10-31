@@ -10,6 +10,26 @@
  * 安裝步驟請看 repo 裡的 SETUP.md
  */
 
+// 後台用的 Google 試算表 ID（留空 = 使用這個程式所在的試算表；都沒有就自動建立一個）
+var SPREADSHEET_ID = '';
+// 第一次使用時自動建立的老師帳號密碼（建立後請到「帳號」工作表修改）
+var DEFAULT_TEACHER_PASSWORD = '1234';
+
+var ss_cache_ = null;
+function ss_() {
+  if (ss_cache_) return ss_cache_;
+  if (SPREADSHEET_ID) return (ss_cache_ = SpreadsheetApp.openById(SPREADSHEET_ID));
+  var active = SpreadsheetApp.getActive();
+  if (active) return (ss_cache_ = active);
+  // 獨立的 Apps Script 專案又沒填 ID：自動建立一個試算表
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('SHEET_ID');
+  if (id) return (ss_cache_ = SpreadsheetApp.openById(id));
+  var ss = SpreadsheetApp.create('英文小考後台（成績與帳號）');
+  props.setProperty('SHEET_ID', ss.getId());
+  return (ss_cache_ = ss);
+}
+
 var SHEETS = {
   users: { name: '帳號',     headers: ['帳號', '密碼', '姓名', '班級', '身分'] },
   bank:  { name: '題庫',     headers: ['單元', '打勾', '英文', '中文', '例句', '例句中文'] },
@@ -17,33 +37,39 @@ var SHEETS = {
   stats: { name: '單字狀態', headers: ['帳號', '單字', '答對次數', '答錯次數', '連續答對', '最後作答'] }
 };
 
-/** 第一次安裝時，在編輯器裡選這個函式按「執行」：建立工作表和範例帳號 */
+/** 建立工作表和範例帳號（第一次有人連線時會自動執行，也可以在編輯器手動執行） */
 function setup() {
-  var ss = SpreadsheetApp.getActive();
+  var ss = ss_();
   Object.keys(SHEETS).forEach(function (k) { sheet_(SHEETS[k]); });
   var users = ss.getSheetByName(SHEETS.users.name);
-  users.getRange('A:B').setNumberFormat('@');   // 帳號、密碼當文字（避免 0012 變成 12）
   if (users.getLastRow() < 2) {
-    users.getRange(2, 1, 3, 5).setValues([
-      ['teacher', '1234', '老師', '', '老師'],
-      ['s001', '1234', '王小明', '七年一班', '學生'],
-      ['s002', '1234', '林小美', '七年一班', '學生']
+    users.getRange('A:B').setNumberFormat('@');   // 帳號、密碼當文字（避免 0012 變成 12）
+    users.getRange(2, 1, 4, 5).setValues([
+      ['teacher', DEFAULT_TEACHER_PASSWORD, '老師', '', '老師'],
+      ['s001', '1234', '範例學生1', '七年一班', '學生'],
+      ['s002', '1234', '範例學生2', '七年一班', '學生'],
+      ['s003', '1234', '範例學生3', '七年二班', '學生']
     ]);
   }
   ['工作表1', 'Sheet1'].forEach(function (n) {
     var sh = ss.getSheetByName(n);
     if (sh && sh.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(sh);
   });
-  // 觸發 Drive 授權（照片／PDF 辨識要用）
-  DriveApp.getRootFolder();
+}
+function ensureSetup_() {
+  if (ss_().getSheetByName(SHEETS.users.name)) return;
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try { if (!ss_().getSheetByName(SHEETS.users.name)) setup(); } finally { lock.releaseLock(); }
 }
 
 function doGet() {
+  ensureSetup_();
   return json_({ ok: true, msg: '英文單字小考後台運作中 ✅' });
 }
 
 function doPost(e) {
   try {
+    ensureSetup_();
     var req = JSON.parse(e.postData.contents || '{}');
     var action = req.action;
     if (action === 'ping') return json_({ ok: true });
@@ -76,7 +102,7 @@ function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 function sheet_(def) {
-  var ss = SpreadsheetApp.getActive();
+  var ss = ss_();
   var sh = ss.getSheetByName(def.name);
   if (!sh) sh = ss.insertSheet(def.name);
   if (sh.getLastRow() === 0) {
@@ -234,6 +260,6 @@ function ocr_(name, mime, data) {
     var text = DocumentApp.openById(file.id).getBody().getText();
     return { ok: true, text: text };
   } finally {
-    DriveApp.getFileById(file.id).setTrashed(true);
+    try { Drive.Files.remove ? Drive.Files.remove(file.id) : Drive.Files.trash(file.id); } catch (e) {}
   }
 }
