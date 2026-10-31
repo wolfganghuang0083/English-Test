@@ -61,6 +61,9 @@ button:disabled{opacity:.45}
 .chip b{display:block;font-size:15px}
 .chip span{font-size:12px;color:var(--muted)}
 .chip:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+#unitChips .chip{padding:8px 10px}
+#unitChips .chip b{font-size:14px}
+#unitChips .chip span{font-size:11px}
 .seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
 .seg label{flex:1;text-align:center;padding:9px 4px;border-radius:9px;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted)}
 .seg input{display:none}
@@ -152,6 +155,19 @@ s{color:var(--bad)}
     </div>
   </div>
 
+  <div class="card" id="scopeCard">
+    <h2>考試範圍</h2>
+    <label class="chip" id="starChip"><input type="checkbox" id="starOnly"><div><b>只考打勾 ✓ 的字</b><span id="starCount"></span></div></label>
+    <div id="unitBox">
+      <div class="lbl" style="font-size:14px;font-weight:600;margin:14px 0 6px;display:flex;justify-content:space-between;align-items:center">
+        <span>單元</span>
+        <span><button class="ghost" id="unitAll" style="min-height:32px;padding:4px 8px">全選</button><button class="ghost" id="unitNone" style="min-height:32px;padding:4px 8px">全不選</button></span>
+      </div>
+      <div class="chips" id="unitChips"></div>
+    </div>
+    <div class="note" id="scopeCount"></div>
+  </div>
+
   <div class="card">
     <h2>考試設定</h2>
     <div class="lbl" style="font-size:14px;font-weight:600;margin-bottom:6px">題型（可複選）</div>
@@ -214,7 +230,7 @@ s{color:var(--bad)}
     <div class="row">
       <label class="btn soft grow" for="fileInput">📄 上傳檔案</label>
       <input type="file" id="fileInput" accept=".txt,.csv,.tsv,text/plain,text/csv" hidden>
-      <button id="loadSample">載入範例</button>
+      <button id="loadSample">載入 80 字題庫</button>
       <button class="ghost" id="clearBank">清空</button>
     </div>
     <p class="small muted" style="margin:10px 0 0">可上傳 .txt / .csv，或從 Excel、Google 試算表直接複製貼上（欄位：英文、中文、例句）。</p>
@@ -230,21 +246,24 @@ s{color:var(--bad)}
   <div class="card">
     <details open>
       <summary>題庫格式</summary>
-      <pre># 每行一題，用 | 分隔：英文 | 中文 | 例句
-apple | 蘋果 | I eat an [apple] every day.
-look forward to | 期待 | I'm [looking forward to] it.
+      <pre>// 每行一題，用 | 分隔：
+// 英文 | 中文 | 例句 | 例句中文（後兩欄可省略）
+# 單元一
+apple | 蘋果 | I eat an [apple] every day. | 我每天吃一顆蘋果。
+✓ look forward to | 期待 | I'm [looking forward to] it.
 You can definitely do it. | 你絕對可以的。
 
-# 克漏字：把答案用 [ ] 括起來 | 中文提示
+# 單元二（克漏字：答案用 [ ] 括起來 | 中文）
 He is good [at] playing basketball. | 他很擅長打籃球。
-
-# 同義答案用 / 分開
 movie/film | 電影</pre>
       <ul class="small muted" style="padding-left:18px;margin:6px 0 0">
         <li>例句裡的單字若沒加 [ ]，會自動找出來挖空（含 -s / -ed / -ing 變化）。</li>
         <li>不規則變化（go → went）請自己用 [ ] 標出。</li>
         <li>也接受「apple 蘋果」這種英文後面直接接中文的寫法。</li>
-        <li># 開頭的行是註解，不會出題。</li>
+        <li># 開頭的行是<b>單元名稱</b>，可以在首頁選要考哪些單元；// 開頭是註解。</li>
+        <li>行首加 ✓（或 *）代表打勾的字，首頁可選「只考打勾的字」。</li>
+        <li>有寫「例句中文」的題目可以考「整句翻譯」。</li>
+        <li>同義答案用 / 分開，例如 movie/film。</li>
       </ul>
     </details>
   </div>
@@ -307,38 +326,110 @@ movie/film | 電影</pre>
 'use strict';
 
 /* ---------------- 範例題庫 ---------------- */
-const SAMPLE = `# 英文單字小考｜範例題庫（可以整個換成你自己的）
-# 格式：英文 | 中文 | 例句（要考的字用 [ ] 括起來，也可以不寫例句）
+const SAMPLE = `// 80 年・80 字 主題單字（國中部）
+// 格式：英文 | 中文 | 例句（[ ] 是克漏字要填的字） | 例句中文
+// 行首有 ✓ 的是講義上打勾的字；# 開頭是單元名稱
 
-apple | 蘋果 | I eat an [apple] every day.
-library | 圖書館 | We borrowed some books from the library.
-borrow | 借（入） | Can I borrow your pen?
-delicious | 美味的 | The cake smells delicious.
-weather | 天氣 | The weather is nice today.
-practice | 練習 | You need to practice every day.
-important | 重要的 | Sleep is important for your health.
-go | 去 | Yesterday she [went] to the park.
-movie/film | 電影 | We watched a [movie] last night.
+# 學習與探究 Learning & Inquiry
+learn | 學習 | We [learn] something new every day. | 我們每天都學到新東西。
+question | 問題；提問 | Good learners are not afraid to ask a [question]. | 好的學習者不怕提問。
+✓ explore | 探索 | We [explore] new ideas in class. | 我們在課堂上探索新的想法。
+✓ discover | 發現 | Reading helps us [discover] a bigger world. | 閱讀幫助我們發現更大的世界。
+practice | 練習 | [Practice] makes our skills stronger. | 練習讓我們的能力更強。
+✓ focus | 專注 | Please [focus] on your work. | 請專心在你的作業上。
+think | 思考 | [Think] carefully before you answer. | 回答之前要仔細思考。
+✓ create | 創造 | Students [create] posters for the school festival. | 學生們為校慶製作海報。
+knowledge | 知識 | Books give us [knowledge]. | 書本給我們知識。
+✓ curious | 好奇的 | A [curious] student always wants to know more. | 好奇的學生總是想知道更多。
 
-# 片語
-look forward to | 期待 | I'm looking forward to the trip.
-take care of | 照顧 | She takes care of her little brother.
-give up | 放棄 | Never give up on your dreams.
+# 理想與志向 Dreams & Aspirations
+✓ dream | 夢想 | Keep your [dream] in your heart. | 把你的夢想放在心裡。
+✓ goal | 目標 | Set a [goal] and work toward it. | 設定一個目標，並朝它努力。
+hope | 希望 | We [hope] to make our school better. | 我們希望讓學校變得更好。
+future | 未來 | Your choices can shape your [future]. | 你的選擇可以塑造你的未來。
+✓ career | 生涯；職業 | She is thinking about her future [career]. | 她正在思考她未來的職業。
+✓ challenge | 挑戰 | A [challenge] can help us grow. | 挑戰能幫助我們成長。
+✓ effort | 努力 | Success often begins with [effort]. | 成功往往從努力開始。
+✓ achieve | 達成 | We can [achieve] our goals step by step. | 我們可以一步一步達成目標。
+believe | 相信 | [Believe] in yourself and keep trying. | 相信自己，持續努力。
+✓ possible | 可能的 | With teamwork, many things are [possible]. | 有了團隊合作，很多事情都有可能。
 
-# 整句翻譯（中翻英）
-You can definitely do it. | 你絕對可以的。
-Don't give up. | 不要放棄。
-How do you say this in English? | 這個用英文怎麼說？
+# 成長與韌性 Growth & Resilience
+grow | 成長 | We [grow] by learning from experience. | 我們從經驗中學習而成長。
+✓ change | 改變 | [Change] can bring new opportunities. | 改變能帶來新的機會。
+✓ improve | 改善；進步 | Practice can [improve] your English. | 練習可以讓你的英文進步。
+mistake | 錯誤 | A [mistake] can become a lesson. | 錯誤可以變成一堂課。
+✓ courage | 勇氣 | It takes [courage] to try again. | 再試一次需要勇氣。
+✓ patient | 有耐心的 | Be [patient] when learning something difficult. | 學習困難的東西時要有耐心。
+strong | 堅強的 | Hard times can make us [stronger]. | 困難的時刻能讓我們更堅強。
+✓ recover | 恢復 | She [recovered] from the setback and tried again. | 她從挫折中振作起來，再試了一次。
+persist | 堅持 | [Persist] even when the task is difficult. | 即使任務很困難也要堅持下去。
+✓ resilience | 韌性 | [Resilience] helps us rise after failure. | 韌性幫助我們在失敗後重新站起來。
 
-# 克漏字（答案用 [ ] 括起來 | 中文提示）
-He is good [at] playing basketball. | 他很擅長打籃球。
-I have [never] been to Japan. | 我從來沒去過日本。
-It is [too] hot to go outside. | 天氣太熱了，不能出門。
+# 群體與合作 Community & Collaboration
+team | 團隊 | Our [team] works toward the same goal. | 我們的團隊朝著同一個目標努力。
+✓ share | 分享 | We [share] ideas with our classmates. | 我們和同學分享想法。
+help | 幫助 | Offer [help] when someone needs it. | 有人需要的時候，主動提供幫助。
+listen | 傾聽 | [Listen] carefully to different opinions. | 仔細傾聽不同的意見。
+✓ support | 支持 | Friends [support] one another. | 朋友們互相支持。
+✓ together | 一起 | We can solve the problem [together]. | 我們可以一起解決這個問題。
+✓ cooperate | 合作 | Students [cooperate] on the group project. | 學生們在小組專題上互相合作。
+✓ community | 群體；社群 | Everyone can contribute to our school [community]. | 每個人都能為我們的學校社群做出貢獻。
+connect | 連結 | Activities [connect] students from different classes. | 活動把不同班級的學生連結在一起。
+✓ collaboration | 協作 | Good [collaboration] needs trust and communication. | 良好的協作需要信任和溝通。
+
+# 品格與價值 Character & Values
+✓ responsibility | 負責 | [Responsibility] means doing what you should do. | 負責就是做你應該做的事。
+✓ self-discipline | 自律 | [Self-discipline] helps us manage our time well. | 自律幫助我們好好管理時間。
+✓ empathy | 同理心 | [Empathy] helps us understand other people's feelings. | 同理心幫助我們理解別人的感受。
+respect | 尊重 | Show [respect] when others are speaking. | 別人說話時要表現出尊重。
+honesty | 誠實 | [Honesty] builds trust. | 誠實能建立信任。
+✓ gratitude | 感恩 | We show [gratitude] to people who help us. | 我們向幫助我們的人表達感恩。
+✓ kindness | 善意 | A small act of [kindness] can brighten someone's day. | 一個小小的善意，能照亮別人的一天。
+✓ fair | 公平的 | A [fair] rule applies to everyone. | 公平的規則適用於每一個人。
+trust | 信任 | [Trust] grows when we keep our promises. | 當我們遵守承諾，信任就會增長。
+✓ care | 關心；照顧 | We [care] about our classmates and our school. | 我們關心我們的同學和學校。
+
+# 全球視野 Global Perspectives
+world | 世界 | We live in a connected [world]. | 我們生活在一個彼此連結的世界。
+✓ culture | 文化 | Food is an important part of [culture]. | 食物是文化中重要的一部分。
+✓ language | 語言 | [Language] helps people communicate. | 語言幫助人們溝通。
+country | 國家 | Students learn about [countries] around the world. | 學生們認識世界各地的國家。
+✓ global | 全球的 | Climate change is a [global] issue. | 氣候變遷是一個全球性的議題。
+✓ environment | 環境 | We should protect the [environment]. | 我們應該保護環境。
+✓ diversity | 多樣性 | [Diversity] makes our community richer. | 多樣性讓我們的社群更豐富。
+peace | 和平 | People around the world hope for [peace]. | 世界各地的人都希望和平。
+exchange | 交流 | Student [exchange] helps us learn about other cultures. | 學生交流幫助我們認識其他文化。
+✓ perspective | 觀點 | Try to see the issue from another [perspective]. | 試著從另一個觀點來看這個問題。
+
+# 卓越與領導 Excellence & Leadership
+✓ excellent | 優秀的 | [Excellent] work comes from steady effort. | 優秀的成果來自持續的努力。
+✓ leader | 領導者 | A good [leader] listens to the team. | 好的領導者會傾聽團隊的聲音。
+lead | 帶領 | She will [lead] the group discussion. | 她將帶領小組討論。
+decide | 決定 | We need to [decide] what to do next. | 我們需要決定接下來要做什麼。
+✓ organize | 組織；安排 | He can [organize] the activity well. | 他能把活動安排得很好。
+serve | 服務 | Student leaders [serve] the school community. | 學生幹部為學校社群服務。
+example | 榜樣 | Set a good [example] for younger students. | 為學弟妹樹立好榜樣。
+✓ quality | 品質 | We care about the [quality] of our work. | 我們重視作品的品質。
+✓ initiative | 主動性 | Take [initiative] instead of waiting to be told. | 要主動去做，而不是等別人來告訴你。
+✓ excellence | 卓越 | [Excellence] grows from effort, reflection, and improvement. | 卓越來自努力、反思和進步。
+
+# 傳承與未來 Legacy & Future
+history | 歷史 | Our school has a long [history]. | 我們學校有悠久的歷史。
+✓ tradition | 傳統 | School [traditions] connect different generations. | 學校的傳統連結了不同的世代。
+✓ memory | 回憶 | School life gives us many good [memories]. | 學校生活給了我們許多美好的回憶。
+✓ celebrate | 慶祝 | We [celebrate] the school's 80th anniversary. | 我們慶祝學校八十週年。
+✓ anniversary | 週年紀念 | This year marks an important [anniversary]. | 今年是一個重要的週年紀念。
+✓ legacy | 傳承；留下的影響 | A school's [legacy] is built by generations of people. | 學校的傳承是由一代又一代的人建立起來的。
+✓ generation | 世代 | Each [generation] adds a new chapter to the school. | 每一個世代都為學校寫下新的篇章。
+continue | 延續 | We will [continue] to learn and grow. | 我們會繼續學習和成長。
+✓ vision | 願景 | Our [vision] guides us toward the future. | 我們的願景引導我們走向未來。
+tomorrow | 明天；未來 | What we do today can shape [tomorrow]. | 我們今天所做的事，能塑造明天。
 `;
 
 const AI_PROMPT = `請把我附上的英文考卷／單字表，整理成下面的格式，每行一題，只輸出結果，不要其他說明：
 
-英文 | 中文意思 | 例句
+英文 | 中文意思 | 例句 | 例句的中文翻譯
 
 規則：
 1. 例句中要考的字或片語用 [ ] 括起來，例如：Yesterday she [went] to the park.
@@ -347,13 +438,15 @@ const AI_PROMPT = `請把我附上的英文考卷／單字表，整理成下面�
 3. 要考「中文翻成英文」的句子寫成：英文句子 | 中文句子
 4. 有多個正確答案用 / 分開，例如：movie/film | 電影
 5. 考卷上沒有例句的單字，請幫我補一句簡單的例句，並把該字用 [ ] 括起來。
-6. 用 # 開頭的行當作分類標題（例如 # 單字、# 片語、# 克漏字）。`;
+6. 用 # 開頭的行當作單元標題（例如 # 單元一、# 片語、# 克漏字）。
+7. 考卷上有打勾的字，在該行最前面加上 ✓。`;
 
 const TYPES = {
   zh2en:  {label:'中翻英',   desc:'看／聽中文，拼出英文'},
   listen: {label:'聽音拼字', desc:'聽英文發音，拼出來'},
   cloze:  {label:'克漏字',   desc:'句子填空'},
-  mc:     {label:'英翻中選擇', desc:'選出正確中文'}
+  mc:     {label:'英翻中選擇', desc:'選出正確中文'},
+  sent:   {label:'整句翻譯', desc:'看／聽中文句子，說出英文'}
 };
 
 /* ---------------- 儲存 ---------------- */
@@ -361,10 +454,10 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem('evq_'+k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem('evq_'+k, JSON.stringify(v)); }catch(e){} }
 };
-const DEFAULTS = {types:['zh2en','listen','cloze'], prompt:'both', count:'10', rate:0.9};
+const DEFAULTS = {types:['zh2en','listen','cloze'], prompt:'both', count:'10', rate:0.9, excludedGroups:[], starOnly:false};
 let settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
 let bankText = store.get('bankText', null);
-if (bankText == null) bankText = SAMPLE;
+if (bankText == null || bankText.startsWith('# 英文單字小考｜範例題庫')) bankText = SAMPLE;  // 舊範例換成 80 字題庫
 let bank = parseBank(bankText);
 let wrongKeys = new Set(store.get('wrongKeys', []));
 let quiz = null;
@@ -424,20 +517,26 @@ function splitAlts(s){ return String(s).split('/').map(x => x.trim()).filter(Boo
 
 function parseBank(text){
   const items = [], skipped = [], seen = new Set();
+  let group = '';
   String(text || '').split(/\r?\n/).forEach((raw, idx) => {
-    const line = raw.trim();
-    if (!line || line.startsWith('#') || line.startsWith('//')) return;
+    let line = raw.trim();
+    if (!line || line.startsWith('//')) return;
+    if (line.startsWith('#')){ group = line.replace(/^#+\s*/, '').trim(); return; }   // 單元名稱
+    const star = /^[✓✔☑★*]/.test(line);
+    if (star) line = line.replace(/^[✓✔☑★*]+\s*/, '');
     const parts = splitLine(line).map(s => s.trim());
-    let first = (parts[0] || '').replace(/\((?:n|v|vt|vi|adj|adv|prep|conj|pron|phr|ph|aux)\.?\)/gi, '').replace(/\s+/g, ' ').trim();
+    let first = (parts[0] || '').replace(/\((?:n|v|vt|vi|adj|adv|a|prep|conj|pron|phr|ph|aux)\.?\)/gi, '').replace(/\s+/g, ' ').trim();
     const zh = parts[1] || '';
-    const sentence = parts.slice(2).filter(Boolean).join(' ').trim();
+    const sentence = (parts[2] || '').trim();
     if (!/[A-Za-z]/.test(first)){ skipped.push(idx + 1); return; }
     let item;
     if (/\[[^\]]+\]/.test(first)){
-      item = { en: first.replace(/\[([^\]]+)\]/g, '$1').replace(/\s+/g, ' ').trim(), zh, sentence: first, clozeOnly: true };
+      item = { en: first.replace(/\[([^\]]+)\]/g, '$1').replace(/\s+/g, ' ').trim(), zh, sentence: first, sentZh: zh, clozeOnly: true };
     } else {
-      item = { en: first, zh, sentence: sentence ? markCloze(sentence, first) : '', clozeOnly: false };
+      item = { en: first, zh, sentence: sentence ? markCloze(sentence, first) : '', sentZh: (parts[3] || '').trim(), clozeOnly: false };
     }
+    item.group = group;
+    item.star = star;
     item.cloze = ((item.sentence.match(/\[([^\]]+)\]/) || [])[1] || '').trim();
     item.key = item.en.toLowerCase() + (item.clozeOnly ? '|' + item.cloze.toLowerCase() : '');
     if (seen.has(item.key)) return;
@@ -584,11 +683,44 @@ function renderHome(){
   $('#rateVal').textContent = (+settings.rate).toFixed(2) + 'x';
   $('#micNote').hidden = !!SR;
 
+  renderScope();
   const wrongItems = it.filter(x => wrongKeys.has(x.key));
   $('#reviewBtn').hidden = !wrongItems.length;
   $('#reviewBtn').textContent = `📕 複習錯題本（${wrongItems.length}）`;
 }
 function saveSettings(){ store.set('settings', settings); }
+
+function groupsOf(items){
+  const m = new Map();
+  items.forEach(x => m.set(x.group, (m.get(x.group) || 0) + 1));
+  return [...m.entries()];
+}
+function scopePool(){
+  return bank.items.filter(x => !settings.excludedGroups.includes(x.group) && (!settings.starOnly || x.star));
+}
+function renderScope(){
+  const groups = groupsOf(bank.items).filter(([g]) => g);
+  const stars = bank.items.filter(x => x.star).length;
+  $('#scopeCard').hidden = groups.length < 2 && !stars;
+  $('#starChip').hidden = !stars;
+  $('#starOnly').checked = !!settings.starOnly;
+  $('#starCount').textContent = `講義上打勾的 ${stars} 個字`;
+  $('#unitBox').hidden = groups.length < 2;
+  $('#unitChips').innerHTML = groups.map(([g, n]) => {
+    const zh = (g.match(/^[^A-Za-z]*/) || [''])[0].trim() || g;
+    const en = g.slice(zh.length).trim();
+    return `<label class="chip"><input type="checkbox" value="${h(g)}" ${settings.excludedGroups.includes(g) ? '' : 'checked'}><div><b>${h(zh)}</b><span>${h(en)}${en ? ' · ' : ''}${n} 字</span></div></label>`;
+  }).join('');
+  const n = scopePool().length;
+  $('#scopeCount').textContent = n ? `目前範圍共 ${n} 題` : '目前範圍沒有題目，請至少選一個單元';
+}
+$('#starOnly').addEventListener('change', e => { settings.starOnly = e.target.checked; saveSettings(); renderScope(); });
+$('#unitChips').addEventListener('change', () => {
+  settings.excludedGroups = [...document.querySelectorAll('#unitChips input:not(:checked)')].map(x => x.value);
+  saveSettings(); renderScope();
+});
+$('#unitAll').addEventListener('click', () => { settings.excludedGroups = []; saveSettings(); renderScope(); });
+$('#unitNone').addEventListener('click', () => { settings.excludedGroups = groupsOf(bank.items).map(([g]) => g); saveSettings(); renderScope(); });
 
 $('#typeChips').addEventListener('change', () => {
   settings.types = [...document.querySelectorAll('#typeChips input:checked')].map(x => x.value);
@@ -598,7 +730,7 @@ $('#promptSeg').addEventListener('change', e => { settings.prompt = e.target.val
 $('#count').addEventListener('change', e => { settings.count = e.target.value; saveSettings(); });
 $('#rate').addEventListener('input', e => { settings.rate = +e.target.value; $('#rateVal').textContent = settings.rate.toFixed(2) + 'x'; saveSettings(); });
 $('#rate').addEventListener('change', () => sayEn('This is the speaking speed.'));
-$('#startBtn').addEventListener('click', () => startQuiz(bank.items));
+$('#startBtn').addEventListener('click', () => startQuiz(scopePool()));
 $('#reviewBtn').addEventListener('click', () => startQuiz(bank.items.filter(x => wrongKeys.has(x.key)), true));
 $('#goBank').addEventListener('click', openBank);
 $('#shareBank').addEventListener('click', shareBank);
@@ -616,7 +748,7 @@ function renderParse(){
   $('#parseSum').textContent = `辨識到 ${p.items.length} 題（可考克漏字 ${cloze} 題）` + (p.skipped.length ? `，第 ${p.skipped.slice(0, 5).join('、')} 行無法辨識` : '');
   $('#parseList').innerHTML = p.items.slice(0, 300).map(x => {
     const kind = x.clozeOnly ? '克漏字' : (/\s/.test(x.en) ? '片語／句' : '單字') + (x.cloze ? '＋克漏字' : '');
-    return `<li><span><b>${h(x.clozeOnly ? x.sentence : x.en)}</b> <span class="muted">${h(x.zh)}</span></span><span class="k">${kind}</span></li>`;
+    return `<li><span><b>${x.star ? '✓ ' : ''}${h(x.clozeOnly ? x.sentence : x.en)}</b> <span class="muted">${h(x.zh)}</span></span><span class="k">${kind}</span></li>`;
   }).join('') || '<li class="muted">還沒有題目</li>';
 }
 function commitBank(){
@@ -630,7 +762,7 @@ $('#bankText').addEventListener('input', () => {
 });
 $('#bankDone').addEventListener('click', () => { commitBank(); renderHome(); show('home'); });
 $('#loadSample').addEventListener('click', () => {
-  if ($('#bankText').value.trim() && !confirm('要用範例取代目前的題庫嗎？')) return;
+  if ($('#bankText').value.trim() && !confirm('要用 80 字題庫取代目前的題庫嗎？')) return;
   $('#bankText').value = SAMPLE; renderParse(); commitBank();
 });
 $('#clearBank').addEventListener('click', () => {
@@ -744,24 +876,25 @@ async function loadFromHash(){
 function eligibleTypes(item, sel, hasMC){
   const t = [];
   if (sel.includes('cloze') && item.cloze) t.push('cloze');
-  if (item.clozeOnly && t.length) return t;   // 克漏字題目優先考克漏字
+  if (sel.includes('sent') && item.sentZh && item.sentence) t.push('sent');
+  if (item.clozeOnly) return t.length ? t : (sel.includes('listen') ? ['listen'] : []);   // 克漏字題目只考句子
   if (sel.includes('zh2en') && item.zh) t.push('zh2en');
   if (sel.includes('listen')) t.push('listen');
   if (sel.includes('mc') && item.zh && hasMC) t.push('mc');
   return t;
 }
 function makeQuestion(item, type){
-  const q = { item, type, answers: splitAlts(type === 'cloze' ? item.cloze : item.en) };
+  const q = { item, type, answers: type === 'sent' ? [plainSentence(item.sentence)] : splitAlts(type === 'cloze' ? item.cloze : item.en) };
   if (type === 'mc'){
-    const others = shuffle([...new Set(bank.items.filter(x => x.zh && x.zh !== item.zh).map(x => x.zh))]).slice(0, 3);
+    const others = shuffle([...new Set(bank.items.filter(x => x.zh && !x.clozeOnly && x.zh !== item.zh).map(x => x.zh))]).slice(0, 3);
     q.options = shuffle([item.zh, ...others]);
   }
   return q;
 }
 function startQuiz(pool, isReview){
   if (!settings.types.length) return toast('請至少勾選一種題型');
-  if (!pool.length) return toast('題庫是空的，請先上傳單字');
-  const hasMC = new Set(bank.items.filter(x => x.zh).map(x => x.zh)).size >= 2;
+  if (!pool.length) return toast(bank.items.length ? '目前範圍沒有題目，請調整單元或打勾設定' : '題庫是空的，請先上傳單字');
+  const hasMC = new Set(bank.items.filter(x => x.zh && !x.clozeOnly).map(x => x.zh)).size >= 2;
   const n = settings.count === 'all' || isReview ? Infinity : +settings.count;
   const qs = [];
   for (const item of shuffle(pool.slice())){
@@ -795,6 +928,7 @@ function speakQuestion(){
     sayEn(it.sentence.replace(/\[([^\]]+)\]/g, (_, w) => { if (!first) return w; first = false; return ', blank, '; }));
   }
   else if (q.type === 'mc') sayEn(it.en);
+  else if (q.type === 'sent') sayZh(it.sentZh);
 }
 
 function renderQuestion(){
@@ -820,6 +954,10 @@ function renderQuestion(){
   } else if (q.type === 'mc'){
     instr = '選出正確的中文意思';
     p = showText ? `<div class="big">${h(it.en)}</div>` : `<div class="hidden-prompt">🔊 聽英文，選出中文</div>`;
+  } else if (q.type === 'sent'){
+    instr = '這句英文怎麼說？（用 🎤 說比較快）';
+    p = showText ? `<div class="sentence" style="text-align:center">${h(it.sentZh)}</div>` : `<div class="hidden-prompt">🔊 聽中文句子，說出英文</div>`;
+    if (!it.clozeOnly) p += `<div class="hint-zh" style="text-align:center">關鍵字：${h(it.zh)}</div>`;
   }
   $('#qPrompt').innerHTML = p;
   $('#qInstr').textContent = instr;
@@ -884,7 +1022,8 @@ function submit(ans, viaVoice){
   if (quiz.answered) return;
   const q = curQ(), it = q.item;
   ans = String(ans || '').trim();
-  const ok = q.type === 'mc' ? ans === it.zh : matches(ans, q.answers);
+  const ok = q.type === 'mc' ? ans === it.zh
+    : matches(ans, q.answers) || (q.type === 'sent' && Math.max(...q.answers.map(a => similarity(ans, a))) >= 0.9);
   quiz.answered = true;
   if (!quiz.results[quiz.i]){
     quiz.results[quiz.i] = { q, user: ans, ok };
@@ -910,7 +1049,8 @@ function submit(ans, viaVoice){
     <div class="t">${ok ? (firstOk ? '✅ 答對了！' : '✅ 這次對了！') : (ans ? '❌ 再加油' : '📖 正確答案')}</div>
     <div class="line">正確答案：<b>${h(answerText)}</b> ${q.type !== 'mc' ? `<button class="say" data-say="${h(q.answers[0])}" aria-label="播放">🔊</button>` : ''}</div>`;
   if (!ok && ans) html += `<div class="line">你的答案：<s>${h(ans)}</s>${viaVoice ? '（語音）' : ''}${sim >= 0.75 ? ' — 很接近了！' : ''}</div>`;
-  if (q.type !== 'zh2en' || it.clozeOnly) html += `<div class="line muted">${h(it.clozeOnly ? plainSentence(it.sentence) : it.en)}　${h(it.zh)}</div>`;
+  if (ok && q.type === 'sent' && !matches(ans, q.answers)) html += `<div class="line">你的答案：${h(ans)}（幾乎一樣，算對！）</div>`;
+  if (q.type !== 'zh2en' || it.clozeOnly) html +=`<div class="line muted">${h(it.clozeOnly ? plainSentence(it.sentence) : it.en)}　${h(it.zh)}</div>`;
   if (it.sentence && !it.clozeOnly) html += `<div class="ex">${clozeHTML(it.sentence, true)} <button class="say" data-say="${h(plainSentence(it.sentence))}" aria-label="播放例句">🔊</button></div>`;
   else if (it.clozeOnly && q.type === 'cloze') html += `<div class="ex">${clozeHTML(it.sentence, true)} <button class="say" data-say="${h(plainSentence(it.sentence))}" aria-label="播放句子">🔊</button></div>`;
   html += `<div class="actions">`;
