@@ -396,7 +396,7 @@ movie/film | 電影</pre>
 <!-- ========== QUIZ ========== -->
 <section id="quiz" class="screen">
   <div class="qtop">
-    <button class="ghost" id="quitBtn" aria-label="結束">✕</button>
+    <button class="soft" id="quitBtn" style="min-height:40px;padding:6px 12px;white-space:nowrap">✕ 結束</button>
     <div class="bar"><i id="qBar"></i></div>
     <span class="small muted" id="qProgress"></span>
   </div>
@@ -418,7 +418,7 @@ movie/film | 電影</pre>
 
 <!-- ========== RESULT ========== -->
 <section id="result" class="screen">
-  <header><h1>🎉 考完了</h1></header>
+  <header><h1>🎉 考完了</h1><button class="soft" id="homeBtn2">🏠 回首頁</button></header>
   <div class="card score">
     <div class="n" id="scoreN"></div>
     <div class="d" id="scoreD"></div>
@@ -1058,8 +1058,11 @@ function startApp(){
 }
 
 /* ---------------- 畫面切換 ---------------- */
+// 手機的「返回」手勢／按鍵：回到首頁，而不是離開網站
+const SUB_SCREENS = ['quiz', 'bank', 'teacher', 'result'];
 function show(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
+  if (SUB_SCREENS.includes(id) && !(history.state && history.state.sub)){ try { history.pushState({sub: true}, ''); } catch(e){} }
   if (id === 'teacher') loadTeacher();
   window.scrollTo(0, 0);
   if (id !== 'quiz'){ if (canTTS) speechSynthesis.cancel(); stopListening(); }
@@ -1741,10 +1744,16 @@ document.addEventListener('keydown', e => {
   }
 });
 $('#replayBtn').addEventListener('click', speakQuestion);
-$('#quitBtn').addEventListener('click', () => {
-  if (quiz.results.filter(Boolean).length && confirm('要結束並看目前成績嗎？')) return renderResult();
-  if (!quiz.results.filter(Boolean).length){ renderHome(); show('home'); }
-});
+// 結束考試：還沒作答就直接回首頁；有作答就先看成績（紀錄會保留）
+function quitQuiz(){
+  const n = quiz ? quiz.results.filter(Boolean).length : 0;
+  if (!n){ renderHome(); show('home'); return true; }
+  if (!confirm(`要結束這次考試嗎？\n已作答的 ${n} 題會保留紀錄，接著會顯示成績。`)) return false;
+  renderResult();
+  return true;
+}
+$('#quitBtn').addEventListener('click', quitQuiz);
+$('#homeBtn2').addEventListener('click', () => { renderHome(); show('home'); });
 
 /* ---------------- 成績 ---------------- */
 function renderResult(){
@@ -1800,6 +1809,15 @@ $('#copyUrl').addEventListener('click', async () => {
   const url = location.origin + location.pathname;
   try { await navigator.clipboard.writeText(url); toast('已複製網址，請貼到 Safari 或 Chrome 開啟', 3500); }
   catch(e){ prompt('複製這個網址，貼到 Safari 或 Chrome：', url); }
+});
+
+window.addEventListener('popstate', () => {
+  const cur = (document.querySelector('.screen.on') || {}).id;
+  const stay = () => { try { history.pushState({sub: true}, ''); } catch(e){} };
+  if (!$('#importModal').hidden){ $('#importModal').hidden = true; return stay(); }
+  if (cur === 'quiz'){ if (!quitQuiz()) stay(); return; }
+  if (cur === 'bank') commitBank();
+  if (SUB_SCREENS.includes(cur)){ renderHome(); show('home'); }
 });
 
 startApp();
