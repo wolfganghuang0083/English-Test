@@ -62,7 +62,11 @@ button:disabled{opacity:.45}
 .chip b{display:block;font-size:15px}
 .chip span{font-size:12px;color:var(--muted)}
 .chip:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
-#unitChips .chip{padding:8px 10px}
+#unitChips .chip{padding:8px 10px;position:relative;padding-right:46px}
+#unitChips .go{position:absolute;right:6px;top:50%;transform:translateY(-50%);min-height:34px;width:34px;padding:0;border-radius:50%;background:var(--accent);color:var(--accent-ink);border:none;font-size:13px}
+.newunit{background:var(--ok-bg);border:2px solid var(--ok);border-radius:var(--radius);padding:14px;margin-bottom:14px}
+.newunit .t{font-weight:800;color:var(--ok);margin-bottom:8px}
+.newunit .u{display:flex;align-items:center;gap:8px;margin-top:8px}
 #unitChips .chip b{font-size:14px}
 #unitChips .chip span{font-size:11px}
 .seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
@@ -229,6 +233,8 @@ s{color:var(--bad)}
 
   <button class="soft block big" id="teacherBtn" hidden style="margin-bottom:14px">👩‍🏫 老師後台：看學生成績</button>
 
+  <div class="newunit" id="newUnits" hidden></div>
+
   <div class="card" id="progressCard">
     <h2>我的學習狀況</h2>
     <div class="lvbar" id="lvBar"></div>
@@ -256,7 +262,7 @@ s{color:var(--bad)}
     <label class="chip" id="starChip"><input type="checkbox" id="starOnly"><div><b>只考打勾 ✓ 的字</b><span id="starCount"></span></div></label>
     <div id="unitBox">
       <div class="lbl" style="font-size:14px;font-weight:600;margin:14px 0 6px;display:flex;justify-content:space-between;align-items:center">
-        <span>單元</span>
+        <span>單元 <span class="small muted" style="font-weight:400">（勾選要考的；按 ▶ 只考那一個）</span></span>
         <span><button class="ghost" id="unitAll" style="min-height:32px;padding:4px 8px">全選</button><button class="ghost" id="unitNone" style="min-height:32px;padding:4px 8px">全不選</button></span>
       </div>
       <div class="chips" id="unitChips"></div>
@@ -880,10 +886,16 @@ function syncPending(){
     .finally(() => { syncing = null; });
   return syncing;
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') syncPending(); });
+let lastRefresh = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') return syncPending();
+  // 切回來時（超過 2 分鐘）重新抓題庫，老師新增的單元馬上看得到；考試中不更新
+  if (isCloud() && Date.now() - lastRefresh > 120000 && !$('#quiz').classList.contains('on')) refreshFromCloud();
+});
 
 async function refreshFromCloud(){
   if (!isCloud()) return;
+  lastRefresh = Date.now();
   try {
     const synced = await syncPending();
     const [b, p] = await Promise.all([api('getBank'), api('getProgress')]);
@@ -1250,8 +1262,34 @@ function renderHome(){
   renderScope();
   renderUser();
   renderProgress();
+  if (session) renderNewUnits();
 }
 function saveSettings(){ store.set('settings', settings); }
+
+// 只考某一個單元
+function startUnit(g){
+  markSeen([g]);
+  startQuiz(bank.items.filter(x => x.group === g && (!settings.starOnly || x.star)).length
+    ? bank.items.filter(x => x.group === g && (!settings.starOnly || x.star))
+    : bank.items.filter(x => x.group === g));
+}
+// 老師新增的單元：學生下次打開時在首頁提示
+function seenGroups(){ return store.get('seenGroups_' + userKey(), null); }
+function markSeen(list){ const s = new Set(seenGroups() || []); list.forEach(g => s.add(g)); store.set('seenGroups_' + userKey(), [...s]); }
+function renderNewUnits(){
+  const groups = groupsOf(bank.items).filter(([g]) => g);
+  let seen = seenGroups();
+  if (!seen){ markSeen(groups.map(([g]) => g)); seen = groups.map(([g]) => g); }   // 第一次使用：現有單元都算看過
+  const fresh = groups.filter(([g]) => !seen.includes(g));
+  const box = $('#newUnits');
+  box.hidden = !fresh.length;
+  if (!fresh.length) return;
+  box.innerHTML = `<div class="t">🆕 老師新增了 ${fresh.length} 個單元</div>` +
+    fresh.map(([g, n]) => `<div class="u"><span class="grow"><b>${h(g)}</b> <span class="small muted">${n} 個字</span></span><button class="primary" data-g="${h(g)}">▶ 開始考</button></div>`).join('') +
+    `<button class="ghost" id="newUnitsOk" style="margin-top:6px">知道了</button>`;
+  box.querySelectorAll('button[data-g]').forEach(b => b.addEventListener('click', () => startUnit(b.dataset.g)));
+  $('#newUnitsOk').addEventListener('click', () => { markSeen(fresh.map(([g]) => g)); renderNewUnits(); });
+}
 
 function groupsOf(items){
   const m = new Map();
@@ -1272,8 +1310,13 @@ function renderScope(){
   $('#unitChips').innerHTML = groups.map(([g, n]) => {
     const zh = (g.match(/^[^A-Za-z]*/) || [''])[0].trim() || g;
     const en = g.slice(zh.length).trim();
-    return `<label class="chip"><input type="checkbox" value="${h(g)}" ${settings.excludedGroups.includes(g) ? '' : 'checked'}><div><b>${h(zh)}</b><span>${h(en)}${en ? ' · ' : ''}${n} 字</span></div></label>`;
+    const items = bank.items.filter(x => x.group === g);
+    const m = items.filter(x => levelOf(x) === 'mastered').length;
+    const fresh = items.every(x => levelOf(x) === 'new');
+    return `<label class="chip"><input type="checkbox" value="${h(g)}" ${settings.excludedGroups.includes(g) ? '' : 'checked'}><div><b>${fresh ? '🆕 ' : ''}${h(zh)}</b><span>${h(en)}${en ? ' · ' : ''}${n} 字${fresh ? '' : ' · 熟練 ' + m}</span></div>` +
+      `<button type="button" class="go" data-g="${h(g)}" aria-label="只考這個單元">▶</button></label>`;
   }).join('');
+  $('#unitChips').querySelectorAll('.go').forEach(b => b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); startUnit(b.dataset.g); }));
   const n = scopePool().length;
   $('#scopeCount').textContent = n ? `目前範圍共 ${n} 題` : '目前範圍沒有題目，請至少選一個單元';
 }
