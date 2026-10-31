@@ -391,16 +391,19 @@ movie/film | 電影</pre>
     <div class="field" id="impUnitField">
       <div class="lbl">這批題目要放在哪個單元／批次？</div>
       <input type="text" id="impUnit" placeholder="例如 Unit 1、第3課、11月第1週" autocomplete="off">
+      <div class="small" id="impUnitStatus" style="margin-top:6px"></div>
       <div class="unitpick" id="impUnitChips"></div>
     </div>
     <label class="chip" id="impKeepBox" style="margin-top:12px"><input type="checkbox" id="impKeep"><div><b id="impKeepLabel">使用檔案裡原本的分類</b><span>不用上面的單元名稱，照檔案裡的標題分單元</span></div></label>
     <div class="field">
       <div class="lbl">匯入方式</div>
       <div class="seg">
-        <label><input type="radio" name="impMode" value="add" checked>加到題庫</label>
-        <label><input type="radio" name="impMode" value="replace">取代整個題庫</label>
+        <label><input type="radio" name="impMode" value="merge" checked>合併</label>
+        <label><input type="radio" name="impMode" value="unit">取代這個單元</label>
+        <label><input type="radio" name="impMode" value="replace">取代全部</label>
       </div>
-      <div class="small muted" style="margin-top:6px">「加到題庫」時，如果這個單元已經有題目，舊的會被這次上傳的換掉；其他單元不受影響。</div>
+      <div class="small muted" id="impModeHelp" style="margin-top:6px"></div>
+      <div class="note" style="margin-top:8px">🔒 學生的作答紀錄和錯題本是跟著「英文單字」記的，重新上傳不會刪掉任何紀錄。只有改了英文拼字的字，會被當成新的字從頭計算。</div>
     </div>
     <div class="field"><div class="lbl">預覽</div><ul class="plist" id="impPreview"></ul></div>
     <div class="row" style="margin-top:14px"><button class="grow" id="impCancel">取消</button><button class="primary grow" id="impOk">匯入</button></div>
@@ -1440,21 +1443,35 @@ async function importFile(f){
 }
 
 let pendingImport = [];
-// 把某個單元換成新內容：單元已存在就留在原本的位置，不存在就加到最後
-function putUnit(text, unit, block){
-  const out = [];
-  let skip = false, placed = false;
+// 合併：舊題目保留原本順序，同一個字換成新版本，新的字加在後面
+function mergeLines(oldLines, newLines){
+  const keyOf = l => { const it = parseBank(l).items[0]; return it ? it.key : null; };
+  const newMap = new Map();
+  newLines.forEach(l => { const k = keyOf(l); if (k) newMap.set(k, l); });
+  const out = [], used = new Set();
+  oldLines.forEach(l => { const k = keyOf(l); if (k && newMap.has(k)){ if (!used.has(k)){ out.push(newMap.get(k)); used.add(k); } } else out.push(l); });
+  newLines.forEach(l => { const k = keyOf(l); if (!k) out.push(l); else if (!used.has(k)){ out.push(l); used.add(k); } });
+  return out;
+}
+// 把內容放進某個單元：單元已存在就留在原本的位置（merge=true 時保留舊題目），不存在就加到最後
+function putUnit(text, unit, block, merge){
+  const out = [], old = [];
+  let skip = false, at = -1;
   for (const line of String(text).split(/\r?\n/)){
     const t = line.trim();
     if (t.startsWith('#')){
       skip = t.replace(/^#+\s*/, '').trim() === unit;
-      if (skip){ if (!placed){ out.push(block.trim(), ''); placed = true; } continue; }
+      if (skip){ if (at < 0) at = out.length; continue; }
     }
-    if (!skip) out.push(line);
+    if (skip){ if (t) old.push(line); } else out.push(line);
   }
+  const fresh = block.split(/\r?\n/).filter(l => l.trim() && !/^\s*#/.test(l));
+  const body = merge ? mergeLines(old, fresh) : fresh;
+  const blk = ['# ' + unit].concat(body).join('\n');
+  if (at >= 0) out.splice(at, 0, blk, '');
   let res = out.join('\n').trim();
-  if (!placed) res = (res ? res + '\n\n' : '') + block.trim();
-  return res + '\n';
+  if (at < 0) res = (res ? res + '\n\n' : '') + blk;
+  return res.replace(/\n{3,}/g, '\n\n') + '\n';
 }
 function suggestUnit(){
   const groups = groupsOf(parseBank($('#bankText').value).items).map(([g]) => g);
@@ -1472,12 +1489,12 @@ function openImport(results){
       : `<div>${r.count ? '✅' : '⚠️'} ${h(r.name)}：<b>${r.count}</b> 題${r.note ? '（' + h(r.note) + '）' : ''}</div>`).join('');
   const existing = groupsOf(parseBank($('#bankText').value).items).map(([g]) => g).filter(Boolean);
   $('#impUnit').value = suggestUnit();
-  $('#impUnitChips').innerHTML = (existing.length ? '<span class="small muted" style="width:100%">或點選已有的單元（會取代該單元的舊題目）：</span>' : '') + existing.slice(-12).map(g => `<button type="button" data-g="${h(g)}">${h(g)}</button>`).join('');
+  $('#impUnitChips').innerHTML = (existing.length ? '<span class="small muted" style="width:100%">或點選已有的單元：</span>' : '') + existing.slice(-12).map(g => `<button type="button" data-g="${h(g)}">${h(g)}</button>`).join('');
   $('#impUnitChips').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { $('#impUnit').value = b.dataset.g; $('#impKeep').checked = false; syncImpUI(); }));
   $('#impKeepBox').hidden = !fileGroups.length;
   $('#impKeepLabel').textContent = `使用檔案裡原本的分類（${fileGroups.length} 個：${fileGroups.slice(0, 3).join('、')}${fileGroups.length > 3 ? '…' : ''}）`;
   $('#impKeep').checked = false;
-  document.querySelector('input[name=impMode][value=add]').checked = true;
+  document.querySelector('input[name=impMode][value=merge]').checked = true;
   const items = parseBank(ok.map(r => r.text).join('\n')).items;
   $('#impPreview').innerHTML = items.slice(0, 50).map(x => `<li><span><b>${x.star ? '✓ ' : ''}${h(x.clozeOnly ? x.sentence : x.en)}</b> <span class="muted">${h(x.zh)}</span></span><span class="k">${x.cloze ? '克漏字' : '單字'}</span></li>`).join('') +
     (items.length > 50 ? `<li class="muted">…還有 ${items.length - 50} 題</li>` : '') ||
@@ -1486,11 +1503,23 @@ function openImport(results){
   syncImpUI();
   $('#importModal').hidden = false;
 }
+const MODE_HELP = {
+  merge: '合併：保留單元裡原本的題目，新的字加進去；同一個字以這次上傳的版本為準。',
+  unit: '取代這個單元：單元裡原本的題目全部換成這次上傳的（其他單元不受影響）。',
+  replace: '取代全部：整個題庫只留下這次上傳的題目。'
+};
 function syncImpUI(){
   const keep = $('#impKeep').checked;
   $('#impUnit').disabled = keep;
   $('#impUnitField').style.opacity = keep ? .45 : 1;
+  const unit = $('#impUnit').value.trim();
+  const n = parseBank($('#bankText').value).items.filter(x => x.group === unit).length;
+  $('#impUnitStatus').innerHTML = keep ? '' : n ? `📂「${h(unit)}」已經有 <b>${n}</b> 題` : unit ? `🆕 會建立新單元「${h(unit)}」` : '';
+  const mode = (document.querySelector('input[name=impMode]:checked') || {}).value || 'merge';
+  $('#impModeHelp').textContent = MODE_HELP[mode];
 }
+$('#impUnit').addEventListener('input', syncImpUI);
+document.querySelectorAll('input[name=impMode]').forEach(r => r.addEventListener('change', syncImpUI));
 function applyImport(){
   const ok = pendingImport.filter(r => !r.error);
   const keep = $('#impKeep').checked && !$('#impKeepBox').hidden;
@@ -1508,18 +1537,18 @@ function applyImport(){
       if (/^\s*#/.test(l)){ g = l.replace(/^\s*#+\s*/, '').trim(); if (!parts[g]){ parts[g] = []; order.push(g); } }
       else if (g) parts[g].push(l); else pre.push(l);
     });
-    order.forEach(name => { cur = putUnit(cur, name, '# ' + name + '\n' + parts[name].join('\n').trim()); });
+    order.forEach(name => { cur = putUnit(cur, name, parts[name].join('\n'), mode === 'merge'); });
     if (pre.join('').trim()) cur = cur.trim() + '\n\n' + pre.join('\n').trim() + '\n';
   } else {
     const body = ok.map(r => r.text.split(/\r?\n/).filter(l => !/^\s*#/.test(l)).join('\n').trim()).filter(Boolean).join('\n');
     block = '# ' + unit + '\n' + body;
-    cur = putUnit(cur, unit, block);
+    cur = putUnit(cur, unit, body, mode === 'merge');
   }
   $('#bankText').value = cur;
   renderParse(); commitBank();
   $('#importModal').hidden = true;
   const n = parseBank(block).items.length;
-  toast(keep ? `已匯入 ${n} 題` : `已匯入 ${n} 題到「${unit}」`, 3500);
+  toast(keep ? `已匯入 ${n} 題` : `已匯入 ${n} 題，「${unit}」現在共有 ${bank.items.filter(x => x.group === unit).length} 題`, 3500);
   if (isCloud() && isTeacher()) setTimeout(saveBankCloud, 300);
 }
 $('#impKeep').addEventListener('change', syncImpUI);
