@@ -327,6 +327,7 @@ s{color:var(--bad)}
       </ul>
     </details>
   </div>
+  <p class="small muted" style="text-align:center" id="appVersion"></p>
 </section>
 
 <!-- ========== BANK ========== -->
@@ -411,6 +412,7 @@ movie/film | 電影</pre>
       <div class="small muted" id="impModeHelp" style="margin-top:6px"></div>
       <div class="note" style="margin-top:8px">🔒 學生的作答紀錄和錯題本是跟著「英文單字」記的，重新上傳不會刪掉任何紀錄。只有改了英文拼字的字，會被當成新的字從頭計算。</div>
     </div>
+    <div class="note warn" id="impWarn" hidden style="margin-top:12px"><b>⚠️ 沒有整理出任何題目</b><br>照片可能太模糊、太斜，或版面太複雜。建議：<br>① 拍正、拍清楚一點再試一次<br>② 有 Word 檔的話直接上傳 Word（最準）<br>③ 用題庫頁下方「🤖 用 AI 整理」</div>
     <div class="field"><div class="lbl">預覽</div><ul class="plist" id="impPreview"></ul></div>
     <div class="row" style="margin-top:14px"><button class="grow" id="impCancel">取消</button><button class="primary grow" id="impOk">匯入</button></div>
   </div>
@@ -461,7 +463,9 @@ movie/film | 電影</pre>
 
 </div>
 <div class="toast" id="toast"></div>
+<div id="updateBar" hidden style="position:fixed;top:0;left:0;right:0;z-index:9;background:var(--accent);color:var(--accent-ink);text-align:center;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:700;cursor:pointer">🔄 有新版本，點這裡更新</div>
 
+<script>window.APP_VERSION = '2026-10-31.9';</script>
 <script src="config.js"></script>
 <script>
 'use strict';
@@ -1124,18 +1128,21 @@ function ocrRowsToBank(text){
   }
   return {count: lines.filter(l => l && !l.startsWith('#')).length, text: lines.join('\n').trim()};
 }
-async function saveBankCloud(){
+async function saveBankCloud(auto, msg){
   commitBank();
   if (!bank.items.length) return toast('題庫是空的');
-  if (!confirm(`要把這 ${bank.items.length} 題存到雲端嗎？\n全部學生登入後都會使用這份題庫。`)) return;
+  if (auto !== true && !confirm(`要把這 ${bank.items.length} 題存到雲端嗎？\n全部學生登入後都會使用這份題庫。`)) return;
   const items = bank.items.map(x => ({group: x.group, star: x.star, en: x.clozeOnly ? x.sentence : x.en, zh: x.zh,
     sentence: x.clozeOnly ? '' : x.sentence, sentZh: x.clozeOnly ? '' : x.sentZh}));
-  const btn = $('#saveCloud'); btn.disabled = true;
-  try { const j = await api('saveBank', {items}, 60000); toast(`已存到雲端：${j.saved} 題 ✓`); }
-  catch(e){ toast('存檔失敗：' + e.message, 4000); }
-  finally { btn.disabled = false; }
+  const btn = $('#saveCloud'); btn.disabled = true; btn.textContent = '☁️ 存到雲端中…';
+  try {
+    const j = await api('saveBank', {items}, 60000);
+    alert('✅ 已存到雲端！\n' + (msg ? msg + '\n' : '') + `題庫共 ${j.saved} 題，學生重新整理網頁就看得到。`);
+  }
+  catch(e){ alert('❌ 存到雲端失敗：' + e.message + '\n請檢查網路後，按「☁️ 存到雲端」再試一次。'); }
+  finally { btn.disabled = false; btn.textContent = '☁️ 存到雲端（全部學生都會用這份題庫）'; }
 }
-$('#saveCloud').addEventListener('click', saveBankCloud);
+$('#saveCloud').addEventListener('click', () => saveBankCloud());
 
 function startApp(){
   if (session && session.mode === 'cloud' && !API) session = null;   // 雲端設定被移除
@@ -1599,6 +1606,8 @@ function openImport(results){
     (items.length > 50 ? `<li class="muted">…還有 ${items.length - 50} 題</li>` : '') ||
     '<li class="muted">沒有整理出題目。可以按「匯入」把原始文字放進題庫自己整理，或用「🤖 用 AI 整理」。</li>';
   $('#impOk').disabled = !ok.length;
+  $('#impOk').textContent = total ? `匯入 ${total} 題` : '仍然匯入（只有原始文字）';
+  $('#impWarn').hidden = !(ok.length && !total);
   syncImpUI();
   $('#importModal').hidden = false;
 }
@@ -1648,7 +1657,8 @@ function applyImport(){
   $('#importModal').hidden = true;
   const n = parseBank(block).items.length;
   toast(keep ? `已匯入 ${n} 題` : `已匯入 ${n} 題，「${unit}」現在共有 ${bank.items.filter(x => x.group === unit).length} 題`, 3500);
-  if (isCloud() && isTeacher()) setTimeout(saveBankCloud, 300);
+  const msg = keep ? `這次匯入 ${n} 題` : `這次匯入 ${n} 題，「${unit}」現在共有 ${bank.items.filter(x => x.group === unit).length} 題`;
+  if (isCloud() && isTeacher()) setTimeout(() => saveBankCloud(true, msg), 200);
 }
 $('#impKeep').addEventListener('change', syncImpUI);
 $('#impCancel').addEventListener('click', () => { $('#importModal').hidden = true; });
@@ -2050,6 +2060,19 @@ window.addEventListener('popstate', () => {
   if (cur === 'bank') commitBank();
   if (SUB_SCREENS.includes(cur)){ renderHome(); show('home'); }
 });
+
+// 檢查有沒有新版本（手機常常會暫存舊版網頁）
+async function checkVersion(){
+  try {
+    const r = await fetch('version.json?t=' + Date.now(), {cache: 'no-store'});
+    const v = (await r.json()).version;
+    if (v && v !== window.APP_VERSION) $('#updateBar').hidden = false;
+  } catch(e){}
+}
+$('#updateBar').addEventListener('click', () => { location.replace(location.pathname + '?v=' + Date.now() + location.hash); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkVersion(); });
+checkVersion();
+$('#appVersion').textContent = '版本 ' + window.APP_VERSION;
 
 startApp();
 window.addEventListener('hashchange', loadFromHash);
