@@ -149,6 +149,12 @@ s{color:var(--bad)}
 .rlist li.click{cursor:pointer}
 .badge{font-size:11px;padding:1px 7px;border-radius:6px;font-weight:700;white-space:nowrap;align-self:center}
 .b-wrong{background:var(--bad-bg);color:var(--bad)}.b-m{background:var(--ok-bg);color:var(--ok)}.b-l{background:var(--accent-soft);color:var(--accent)}
+.modal{position:fixed;inset:0;background:rgba(10,14,24,.55);z-index:8;display:flex;align-items:flex-end;justify-content:center}
+.modal .sheet{background:var(--card);width:100%;max-width:560px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom))}
+@media (min-width:600px){.modal{align-items:center}.modal .sheet{border-radius:20px}}
+.unitpick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.unitpick button{min-height:34px;padding:4px 10px;font-size:13px;border-radius:99px;background:var(--accent-soft);color:var(--accent);border:none}
+.bad-line{color:var(--bad)}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;max-width:90vw;z-index:9}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
@@ -312,12 +318,12 @@ s{color:var(--bad)}
 
   <div class="card">
     <div class="row">
-      <label class="btn soft grow" for="fileInput">📄 上傳檔案／照片／PDF</label>
-      <input type="file" id="fileInput" accept=".txt,.csv,.tsv,.pdf,text/plain,text/csv,application/pdf,image/*" multiple hidden>
+      <label class="btn primary grow" for="fileInput">📄 上傳題目（Word／PDF／照片）</label>
+      <input type="file" id="fileInput" accept=".docx,.doc,.pdf,.txt,.csv,.tsv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/pdf,text/plain,text/csv,image/*" multiple hidden>
       <button id="loadSample">載入 80 字題庫</button>
       <button class="ghost" id="clearBank">清空</button>
     </div>
-    <p class="small muted" style="margin:10px 0 0">可上傳 .txt / .csv、<b>考卷照片或 PDF</b>（老師帳號會自動辨識文字，可一次選多張），或從 Excel、Google 試算表直接複製貼上。</p>
+    <p class="small muted" style="margin:10px 0 0">可一次選多個檔案：<b>Word（.docx）</b>、<b>PDF</b>、<b>考卷照片</b>、.txt／.csv。上傳後會問你這批題目要放在<b>哪個單元（例如 Unit 1）</b>。PDF、照片和舊版 .doc 要用老師帳號登入才能辨識。也可以直接在下面的框框貼上 Excel／Google 試算表的表格。</p>
     <button class="primary block" id="saveCloud" hidden style="margin-top:10px">☁️ 存到雲端（全部學生都會用這份題庫）</button>
   </div>
 
@@ -362,6 +368,30 @@ movie/film | 電影</pre>
     </details>
   </div>
 </section>
+
+<!-- ========== IMPORT DIALOG ========== -->
+<div class="modal" id="importModal" hidden>
+  <div class="sheet">
+    <h2 style="margin:0 0 8px;font-size:19px">📥 匯入題目</h2>
+    <div id="impSummary" class="small"></div>
+    <div class="field" id="impUnitField">
+      <div class="lbl">這批題目要放在哪個單元／批次？</div>
+      <input type="text" id="impUnit" placeholder="例如 Unit 1、第3課、11月第1週" autocomplete="off">
+      <div class="unitpick" id="impUnitChips"></div>
+    </div>
+    <label class="chip" id="impKeepBox" style="margin-top:12px"><input type="checkbox" id="impKeep"><div><b id="impKeepLabel">使用檔案裡原本的分類</b><span>不用上面的單元名稱，照檔案裡的標題分單元</span></div></label>
+    <div class="field">
+      <div class="lbl">匯入方式</div>
+      <div class="seg">
+        <label><input type="radio" name="impMode" value="add" checked>加到題庫</label>
+        <label><input type="radio" name="impMode" value="replace">取代整個題庫</label>
+      </div>
+      <div class="small muted" style="margin-top:6px">「加到題庫」時，如果這個單元已經有題目，舊的會被這次上傳的換掉；其他單元不受影響。</div>
+    </div>
+    <div class="field"><div class="lbl">預覽</div><ul class="plist" id="impPreview"></ul></div>
+    <div class="row" style="margin-top:14px"><button class="grow" id="impCancel">取消</button><button class="primary grow" id="impOk">匯入</button></div>
+  </div>
+</div>
 
 <!-- ========== QUIZ ========== -->
 <section id="quiz" class="screen">
@@ -626,8 +656,8 @@ function parseBank(text){
     item.star = star;
     item.cloze = ((item.sentence.match(/\[([^\]]+)\]/) || [])[1] || '').trim();
     item.key = item.en.toLowerCase() + (item.clozeOnly ? '|' + item.cloze.toLowerCase() : '');
-    if (seen.has(item.key)) return;
-    seen.add(item.key);
+    if (seen.has(group + '|' + item.key)) return;   // 同一個單元裡重複的字只留一個
+    seen.add(group + '|' + item.key);
     items.push(item);
   });
   return { items, skipped };
@@ -1007,36 +1037,6 @@ function ocrToBank(text){
   }
   return {count: lines.filter(l => l && !l.startsWith('#')).length, text: lines.join('\n').trim()};
 }
-async function ocrFiles(files){
-  if (!(isCloud() && isTeacher())){
-    toast(API ? '照片／PDF 辨識要用老師帳號登入才能使用' : '照片／PDF 辨識需要先設定雲端後台（見 SETUP.md）。也可以用下方「🤖 用 AI 整理」', 5000);
-    $('#aiBox').open = true;
-    return;
-  }
-  const out = [];
-  let total = 0;
-  for (let i = 0; i < files.length; i++){
-    const f = files[i];
-    toast(`辨識中（${i + 1}/${files.length}）：${f.name}，約需 10～30 秒…`, 60000);
-    try {
-      const isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name);
-      if (isPdf && f.size > 15e6) throw new Error('PDF 太大（超過 15MB）');
-      const payload = isPdf ? {mime: 'application/pdf', data: await fileToBase64(f)} : await imageToJpeg(f);
-      const j = await api('ocr', {name: f.name, mime: payload.mime, data: payload.data}, 120000);
-      const conv = ocrToBank(j.text);
-      if (conv.count >= 3){ out.push('// 來自：' + f.name + '（自動辨識，請檢查）\n' + conv.text); total += conv.count; }
-      else out.push('// ⚠️「' + f.name + '」辨識出來的文字無法自動整理，請改成「英文 | 中文 | 例句」格式後刪掉 // ：\n' +
-                    String(j.text || '').split(/\r?\n/).filter(l => l.trim()).map(l => '// ' + l).join('\n'));
-    } catch(e){ out.push('// ⚠️「' + f.name + '」辨識失敗：' + e.message); }
-  }
-  const add = out.join('\n\n');
-  const cur = $('#bankText').value.trim();
-  $('#bankText').value = cur && !confirm(`辨識完成，整理出 ${total} 個字。\n要「取代」目前的題庫嗎？\n（按取消＝加到最後面）`) ? cur + '\n\n' + add : add;
-  renderParse(); commitBank();
-  toast(total ? `整理出 ${total} 個字，請檢查是否正確，再按「☁️ 存到雲端」` : '沒辦法自動整理，請參考下方「🤖 用 AI 整理」', 5000);
-  if (!total) $('#aiBox').open = true;
-}
-
 async function saveBankCloud(){
   commitBank();
   if (!bank.items.length) return toast('題庫是空的');
@@ -1198,29 +1198,245 @@ async function readFileText(file){
   }
   return text.replace(/^﻿/, '');
 }
+/* ---------------- 匯入題目：Word / PDF / 照片 / 文字檔 ---------------- */
+// .docx 其實是 zip 檔：直接在瀏覽器解壓縮，不需要外部元件
+async function unzipText(buf, name){
+  const dv = new DataView(buf), u8 = new Uint8Array(buf), dec = new TextDecoder();
+  let eocd = -1;
+  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; }
+  if (eocd < 0) throw new Error('不是有效的 Word 檔（.docx）');
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  for (let k = 0; k < count; k++){
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true);
+    const nlen = dv.getUint16(p + 28, true), xlen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+    if (dec.decode(u8.subarray(p + 46, p + 46 + nlen)) === name){
+      const start = off + 30 + dv.getUint16(off + 26, true) + dv.getUint16(off + 28, true);
+      const data = u8.subarray(start, start + csize);
+      if (method === 0) return dec.decode(data);
+      if (method === 8){
+        if (!('DecompressionStream' in window)) throw new Error('這個瀏覽器太舊，無法讀取 Word 檔');
+        return await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+      }
+      throw new Error('不支援的 Word 壓縮格式');
+    }
+    p += 46 + nlen + xlen + clen;
+  }
+  throw new Error('Word 檔裡找不到內容');
+}
+// 讀出 Word 裡的段落和表格（保留表格的欄位）
+async function docxBlocks(file){
+  const xml = await unzipText(await file.arrayBuffer(), 'word/document.xml');
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const paraText = el => [...el.getElementsByTagNameNS(W, 't')].map(t => t.textContent).join('');
+  const cellText = tc => [...tc.getElementsByTagNameNS(W, 'p')].map(paraText).join(' ').replace(/\s+/g, ' ').trim();
+  const body = doc.getElementsByTagNameNS(W, 'body')[0];
+  const out = [];
+  if (!body) return out;
+  for (const el of body.children){
+    if (el.localName === 'p'){ const t = paraText(el).trim(); if (t) out.push({type: 'p', text: t}); }
+    else if (el.localName === 'tbl'){
+      for (const tr of el.getElementsByTagNameNS(W, 'tr')){
+        out.push({type: 'row', cells: [...tr.children].filter(c => c.localName === 'tc').map(cellText)});
+      }
+    }
+  }
+  return out;
+}
+const HAS_CJK = /[㐀-鿿]/, HAS_LATIN = /[A-Za-z]/;
+const UNIT_LINE = /^(unit|lesson|chapter|part|week|review|module)\s*\d+\b[^|]{0,30}$|^第\s*[\d一二三四五六七八九十]+\s*[課單元週章冊回][^|]{0,20}$/i;
+const cleanEn = s => s.replace(/\((?:n|v|vt|vi|adj|adv|a|prep|conj|pron|phr|ph|aux)\.?\)/gi, '').replace(/\s+/g, ' ').trim();
+// 把表格列（Word 表格、CSV）整理成題庫：會自動找「英文／中文／例句」欄位
+function rowsToBank(blocks){
+  const lines = [], groups = [];
+  let map = null, lastPara = '', group = '';
+  const find = (cells, re) => cells.findIndex(c => re.test(c.trim()));
+  for (const b of blocks){
+    if (b.type === 'p'){
+      const t = b.text.trim();
+      if (t.length <= 40 && !/[.。!?！？:：]$/.test(t)) lastPara = t;
+      continue;
+    }
+    const cells = b.cells.map(c => String(c || '').replace(/[|\r\n]+/g, ' ').trim());
+    if (!cells.some(Boolean)) continue;
+    // 表頭列
+    const en = find(cells, /^(word|words|vocabulary|vocab|english|英文|單字|單字\/片語|片語|生字)$/i);
+    if (en >= 0){
+      const sz = find(cells, /(例句中文|例句翻譯|翻譯|translation)/i);
+      const zh = cells.findIndex((c, i) => i !== sz && /^(中文|中文意思|意思|字義|meaning|chinese)$/i.test(c.trim()));
+      const sent = cells.findIndex((c, i) => i !== sz && /(example|sentence|例句)/i.test(c));
+      const star = find(cells, /^(✓|打勾|重點|★)$/);
+      map = {en, zh, sent, sz, star};
+      if (lastPara && lastPara !== group){ group = lastPara; groups.push(group); lines.push('', '# ' + group); }
+      lastPara = '';
+      continue;
+    }
+    let item = null;
+    if (map){
+      const w = cleanEn(cells[map.en] || '');
+      if (HAS_LATIN.test(w)) item = {en: w, zh: map.zh >= 0 ? cells[map.zh] : '', s: map.sent >= 0 ? cells[map.sent] : '', sz: map.sz >= 0 ? cells[map.sz] : '',
+                                     star: map.star >= 0 && /[✓✔vV★*]/.test(cells[map.star] || '')};
+    } else {
+      // 沒有表頭：短的英文＝單字、中文＝意思、長的英文＝例句
+      const w = cells.find(c => HAS_LATIN.test(c) && !HAS_CJK.test(c) && cleanEn(c).split(' ').length <= 4 && !/^\d/.test(c));
+      if (w){
+        item = {en: cleanEn(w), zh: cells.find(c => HAS_CJK.test(c) && !HAS_LATIN.test(c)) || '',
+                s: cells.find(c => c !== w && HAS_LATIN.test(c) && c.trim().split(/\s+/).length >= 4) || '', sz: '', star: false};
+      }
+    }
+    if (!item || !item.en) continue;
+    const parts = [item.en, item.zh, item.s, item.sz];
+    while (parts.length > 1 && !parts[parts.length - 1]) parts.pop();
+    lines.push((item.star ? '✓ ' : '') + parts.join(' | '));
+  }
+  const text = lines.join('\n').trim();
+  return {text, count: parseBank(text).items.length, groups};
+}
+function textToBank(text){
+  const p = parseBank(text);
+  const groups = [...new Set(p.items.map(x => x.group).filter(Boolean))];
+  return {text: String(text).trim(), count: p.items.length, groups};
+}
+async function serverConvert(f){
+  if (!(isCloud() && isTeacher())) throw new Error(API ? '要用老師帳號登入才能辨識照片／PDF／舊版 Word' : '照片／PDF 辨識需要雲端後台');
+  const isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name);
+  const isDoc = /\.doc$/i.test(f.name);
+  if (f.size > 15e6) throw new Error('檔案太大（超過 15MB）');
+  const payload = isPdf ? {mime: 'application/pdf', data: await fileToBase64(f)}
+                : isDoc ? {mime: 'application/msword', data: await fileToBase64(f)}
+                : await imageToJpeg(f);
+  const j = await api('ocr', {name: f.name, mime: payload.mime, data: payload.data}, 120000);
+  const conv = ocrToBank(j.text);
+  if (conv.count >= 3) return {text: conv.text, count: parseBank(conv.text).items.length, groups: textToBank(conv.text).groups, note: '自動辨識，請檢查'};
+  const raw = String(j.text || '').split(/\r?\n/).filter(l => l.trim()).map(l => '// ' + l).join('\n');
+  return {text: '// ⚠️ 無法自動整理，請改成「英文 | 中文 | 例句」格式後刪掉行首的 //\n' + raw, count: 0, groups: [], note: '無法自動整理'};
+}
+async function importFile(f){
+  const n = f.name.toLowerCase();
+  let r;
+  if (/\.docx$/.test(n)){
+    const blocks = await docxBlocks(f);
+    r = rowsToBank(blocks);
+    if (!r.count) r = textToBank(blocks.map(b => b.type === 'p' ? b.text : b.cells.join(' | '))
+      .map(l => UNIT_LINE.test(l.trim()) ? '# ' + l.trim() : l).join('\n'));   // 不是表格：一行一題；「Unit 3」這種行當作單元標題
+  }
+  else if (/\.csv$/.test(n)) r = rowsToBank(parseCSV(await readFileText(f)).map(cells => ({type: 'row', cells})));
+  else if (/\.(txt|tsv|text)$/.test(n) || f.type === 'text/plain'){
+    const t = await readFileText(f);
+    const tabRows = t.split(/\r?\n/).filter(l => l.includes('\t'));
+    r = tabRows.length > 2 ? rowsToBank(t.split(/\r?\n/).map(l => l.includes('\t') ? {type: 'row', cells: l.split('\t')} : {type: 'p', text: l})) : textToBank(t);
+    if (!r.count) r = textToBank(t);
+  }
+  else if (/\.(xlsx?|pptx?|numbers|pages|key)$/.test(n)) throw new Error('Excel 請另存成 CSV，或直接複製貼上表格');
+  else if (/^image\//.test(f.type) || /\.(pdf|doc|jpe?g|png|heic|heif|webp|gif)$/.test(n)) r = await serverConvert(f);
+  else throw new Error('不支援這種檔案');
+  return Object.assign({name: f.name}, r);
+}
+
+let pendingImport = [];
+// 把某個單元換成新內容：單元已存在就留在原本的位置，不存在就加到最後
+function putUnit(text, unit, block){
+  const out = [];
+  let skip = false, placed = false;
+  for (const line of String(text).split(/\r?\n/)){
+    const t = line.trim();
+    if (t.startsWith('#')){
+      skip = t.replace(/^#+\s*/, '').trim() === unit;
+      if (skip){ if (!placed){ out.push(block.trim(), ''); placed = true; } continue; }
+    }
+    if (!skip) out.push(line);
+  }
+  let res = out.join('\n').trim();
+  if (!placed) res = (res ? res + '\n\n' : '') + block.trim();
+  return res + '\n';
+}
+function suggestUnit(){
+  const groups = groupsOf(parseBank($('#bankText').value).items).map(([g]) => g);
+  let n = 1;
+  while (groups.includes('Unit ' + n)) n++;
+  return 'Unit ' + n;
+}
+function openImport(results){
+  pendingImport = results;
+  const ok = results.filter(r => !r.error);
+  const total = ok.reduce((a, r) => a + r.count, 0);
+  const fileGroups = [...new Set(ok.flatMap(r => r.groups))];
+  $('#impSummary').innerHTML = results.map(r => r.error
+      ? `<div class="bad-line">❌ ${h(r.name)}：${h(r.error)}</div>`
+      : `<div>${r.count ? '✅' : '⚠️'} ${h(r.name)}：<b>${r.count}</b> 題${r.note ? '（' + h(r.note) + '）' : ''}</div>`).join('');
+  const existing = groupsOf(parseBank($('#bankText').value).items).map(([g]) => g).filter(Boolean);
+  $('#impUnit').value = suggestUnit();
+  $('#impUnitChips').innerHTML = (existing.length ? '<span class="small muted" style="width:100%">或點選已有的單元（會取代該單元的舊題目）：</span>' : '') + existing.slice(-12).map(g => `<button type="button" data-g="${h(g)}">${h(g)}</button>`).join('');
+  $('#impUnitChips').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { $('#impUnit').value = b.dataset.g; $('#impKeep').checked = false; syncImpUI(); }));
+  $('#impKeepBox').hidden = !fileGroups.length;
+  $('#impKeepLabel').textContent = `使用檔案裡原本的分類（${fileGroups.length} 個：${fileGroups.slice(0, 3).join('、')}${fileGroups.length > 3 ? '…' : ''}）`;
+  $('#impKeep').checked = false;
+  document.querySelector('input[name=impMode][value=add]').checked = true;
+  const items = parseBank(ok.map(r => r.text).join('\n')).items;
+  $('#impPreview').innerHTML = items.slice(0, 50).map(x => `<li><span><b>${x.star ? '✓ ' : ''}${h(x.clozeOnly ? x.sentence : x.en)}</b> <span class="muted">${h(x.zh)}</span></span><span class="k">${x.cloze ? '克漏字' : '單字'}</span></li>`).join('') +
+    (items.length > 50 ? `<li class="muted">…還有 ${items.length - 50} 題</li>` : '') ||
+    '<li class="muted">沒有整理出題目。可以按「匯入」把原始文字放進題庫自己整理，或用「🤖 用 AI 整理」。</li>';
+  $('#impOk').disabled = !ok.length;
+  syncImpUI();
+  $('#importModal').hidden = false;
+}
+function syncImpUI(){
+  const keep = $('#impKeep').checked;
+  $('#impUnit').disabled = keep;
+  $('#impUnitField').style.opacity = keep ? .45 : 1;
+}
+function applyImport(){
+  const ok = pendingImport.filter(r => !r.error);
+  const keep = $('#impKeep').checked && !$('#impKeepBox').hidden;
+  const unit = $('#impUnit').value.trim().replace(/^#+/, '').trim();
+  const mode = document.querySelector('input[name=impMode]:checked').value;
+  if (!keep && !unit) return toast('請輸入單元名稱，例如 Unit 1');
+  let cur = mode === 'replace' ? '' : $('#bankText').value;
+  let block;
+  if (keep){
+    block = ok.map(r => r.text).join('\n\n');
+    // 依檔案裡的每個分類分別放入（同名單元就地取代）
+    const parts = {}, order = [], pre = [];
+    let g = '';
+    block.split(/\r?\n/).forEach(l => {
+      if (/^\s*#/.test(l)){ g = l.replace(/^\s*#+\s*/, '').trim(); if (!parts[g]){ parts[g] = []; order.push(g); } }
+      else if (g) parts[g].push(l); else pre.push(l);
+    });
+    order.forEach(name => { cur = putUnit(cur, name, '# ' + name + '\n' + parts[name].join('\n').trim()); });
+    if (pre.join('').trim()) cur = cur.trim() + '\n\n' + pre.join('\n').trim() + '\n';
+  } else {
+    const body = ok.map(r => r.text.split(/\r?\n/).filter(l => !/^\s*#/.test(l)).join('\n').trim()).filter(Boolean).join('\n');
+    block = '# ' + unit + '\n' + body;
+    cur = putUnit(cur, unit, block);
+  }
+  $('#bankText').value = cur;
+  renderParse(); commitBank();
+  $('#importModal').hidden = true;
+  const n = parseBank(block).items.length;
+  toast(keep ? `已匯入 ${n} 題` : `已匯入 ${n} 題到「${unit}」`, 3500);
+  if (isCloud() && isTeacher()) setTimeout(saveBankCloud, 300);
+}
+$('#impKeep').addEventListener('change', syncImpUI);
+$('#impCancel').addEventListener('click', () => { $('#importModal').hidden = true; });
+$('#impOk').addEventListener('click', applyImport);
+
 $('#fileInput').addEventListener('change', async e => {
   const files = [...e.target.files]; e.target.value = '';
   if (!files.length) return;
-  const visual = files.filter(f => /^image\//.test(f.type) || /\.(pdf|jpe?g|png|heic|heif|webp)$/i.test(f.name));
-  if (visual.length) return ocrFiles(visual);
-  const file = files[0];
-  if (/\.(xlsx?|docx?)$/i.test(file.name)){
-    toast('Excel／Word 檔無法直接讀取：Excel 請另存成 CSV，或直接複製貼上', 4500);
-    return;
+  const results = [];
+  for (let i = 0; i < files.length; i++){
+    const f = files[i];
+    const slow = /^image\//.test(f.type) || /\.(pdf|doc)$/i.test(f.name);
+    toast(`讀取中（${i + 1}/${files.length}）：${f.name}${slow ? '，辨識約需 10～30 秒…' : '…'}`, 120000);
+    try { results.push(await importFile(f)); }
+    catch(err){ results.push({name: f.name, error: err.message, text: '', count: 0, groups: []}); }
   }
-  let text = await readFileText(file);
-  if (/\.csv$/i.test(file.name)){
-    text = parseCSV(text).filter(r => r.some(c => c.trim())).map(r => r.map(c => c.replace(/[|\n\r]/g, ' ').trim()).join(' | ')).join('\n');
-  }
-  const cur = $('#bankText').value.trim();
-  if (cur && cur !== SAMPLE.trim() && !confirm('要用這個檔案「取代」目前的題庫嗎？\n（按取消＝加到最後面）')){
-    $('#bankText').value = cur + '\n\n# ' + file.name + '\n' + text;
-  } else {
-    $('#bankText').value = text;
-  }
-  renderParse(); commitBank();
-  toast(`已讀取 ${file.name}`);
+  $('#toast').classList.remove('on');
+  openImport(results);
 });
+
 $('#aiPrompt').textContent = AI_PROMPT;
 $('#copyPrompt').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(AI_PROMPT); toast('已複製指令'); }
@@ -1312,7 +1528,8 @@ function startQuiz(pool, mode){
   if (!pool.length) return toast(mode === 'review' ? '錯題本是空的，太棒了！' : bank.items.length ? '目前範圍沒有題目，請調整單元或打勾設定' : '題庫是空的，請先上傳單字');
   const hasMC = new Set(bank.items.filter(x => x.zh && !x.clozeOnly).map(x => x.zh)).size >= 2;
   const n = settings.count === 'all' || mode !== 'normal' ? Infinity : +settings.count;
-  let list = shuffle(pool.slice());
+  const uniq = new Set();
+  let list = shuffle(pool.filter(x => !uniq.has(x.key) && uniq.add(x.key)));   // 不同單元有同一個字時只考一次
   if (mode === 'normal' && settings.order === 'smart'){
     const rank = {wrong: 0, new: 1, learning: 2, mastered: 3};
     list.sort((a, b) => rank[levelOf(a)] - rank[levelOf(b)]);
@@ -1449,7 +1666,7 @@ function submit(ans, viaVoice){
   quiz.answered = true;
   if (!quiz.results[quiz.i]){
     const prev = progress[it.key] ? Object.assign({}, progress[it.key]) : null;
-    const rec = { t: Date.now(), key: it.key, en: it.clozeOnly ? plainSentence(it.sentence) : it.en, type: TYPES[q.type].label,
+    const rec = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), t: Date.now(), key: it.key, en: it.clozeOnly ? plainSentence(it.sentence) : it.en, type: TYPES[q.type].label,
                   ok, ans, correct: q.type === 'mc' ? it.zh : q.answers.join(' / ') };
     quiz.results[quiz.i] = { q, user: ans, ok, prev, rec };
     applyResult(it.key, ok);

@@ -36,7 +36,7 @@ function ss_() {
 var SHEETS = {
   users: { name: '帳號',     headers: ['帳號', '密碼', '姓名', '班級', '身分'] },
   bank:  { name: '題庫',     headers: ['單元', '打勾', '英文', '中文', '例句', '例句中文'] },
-  log:   { name: '作答紀錄', headers: ['時間', '帳號', '姓名', '班級', '單字', '題型', '對錯', '學生答案', '正確答案'] },
+  log:   { name: '作答紀錄', headers: ['時間', '帳號', '姓名', '班級', '單字', '題型', '對錯', '學生答案', '正確答案', '紀錄ID'] },
   stats: { name: '單字狀態', headers: ['帳號', '單字', '答對次數', '答錯次數', '連續答對', '最後作答'] }
 };
 
@@ -60,6 +60,11 @@ function setup() {
   });
 }
 function ensureSetup_() {
+  var props = PropertiesService.getScriptProperties();
+  if (!props.getProperty('TZ_SET')) {   // 試算表時區設成台灣，日期才不會差一天
+    try { ss_().setSpreadsheetTimeZone(Session.getScriptTimeZone() || 'Asia/Taipei'); } catch (e) {}
+    props.setProperty('TZ_SET', '1');
+  }
   if (ss_().getSheetByName(SHEETS.users.name)) return;
   var lock = LockService.getScriptLock(); lock.waitLock(20000);
   try { if (!ss_().getSheetByName(SHEETS.users.name)) setup(); } finally { lock.releaseLock(); }
@@ -202,9 +207,23 @@ function saveResults_(u, results) {
   var lock = LockService.getScriptLock(); lock.waitLock(25000);
   try {
     var log = sheet_(SHEETS.log);
+    if (log.getRange(1, 10).getValue() !== '紀錄ID') log.getRange(1, 10).setValue('紀錄ID').setFontWeight('bold').setBackground('#e8efff');
+    // 同一筆紀錄重送（網路逾時後補傳）時不要重複記錄
+    var n = log.getLastRow() - 1, seen = {};
+    if (n > 0) {
+      var start = Math.max(2, log.getLastRow() - 3000 + 1);
+      log.getRange(start, 10, log.getLastRow() - start + 1, 1).getValues().forEach(function (r) { if (r[0]) seen[String(r[0])] = 1; });
+    }
+    results = results.filter(function (r) {
+      if (!r.id) return true;
+      var id = String(r.id).slice(0, 40);
+      if (seen[id]) return false;
+      seen[id] = 1; return true;
+    });
+    if (!results.length) return { ok: true, saved: 0 };
     var logRows = results.map(function (r) {
       return [new Date(r.t || Date.now()), u.id, u.name, u.cls, safe_(r.en), safe_(r.type),
-              r.ok ? '✓' : '✗', safe_(r.ans), safe_(r.correct)];
+              r.ok ? '✓' : '✗', safe_(r.ans), safe_(r.correct), String(r.id || '').slice(0, 40)];
     });
     log.getRange(log.getLastRow() + 1, 1, logRows.length, logRows[0].length).setValues(logRows);
 
