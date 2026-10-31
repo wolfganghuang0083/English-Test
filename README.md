@@ -51,4 +51,12 @@ movie/film | 電影
 3. 等 1～2 分鐘，網址會是 `https://<你的帳號>.github.io/English-Test/`
 4. 用手機打開這個網址，可以「加入主畫面」，用起來就像 App
 
-> 語音作答建議用 iPhone 的 Safari 或 Android 的 Chrome。LINE、FB 的內建瀏覽器通常不能用麥克風。第一次按 🎤 時要允許麥克風權限。
+## ⚠️ 一定要用瀏覽器開啟
+
+- **請用 iPhone 的 Safari 或 Android 的 Chrome 開啟。** 在 LINE、FB、IG 裡直接點開會**沒有聲音**，也不能用麥克風。
+- 網頁偵測到是在 LINE／FB／IG 裡開啟時，最上面會出現紅色警告，教你怎麼改用瀏覽器開啟。
+- **用 LINE 傳網址時，請傳這個版本**，LINE 會自動改用外部瀏覽器開啟：
+  `https://wolfganghuang0083.github.io/English-Test/?openExternalBrowser=1`
+  （用網頁裡的「🔗 分享」產生的題庫連結已經自動帶上這個參數）
+- iPhone 要**關掉靜音模式**（畫面上方出現 🔕 就是靜音中），音量調大。首頁有「🔊 測試聲音」按鈕可以先試。
+- 第一次按 🎤 時要允許麥克風權限。

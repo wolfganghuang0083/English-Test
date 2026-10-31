@@ -135,16 +135,32 @@ s{color:var(--bad)}
 .plist{list-style:none;margin:8px 0 0;padding:0;max-height:240px;overflow:auto;font-size:14px}
 .plist li{padding:6px 0;border-bottom:1px solid var(--line);display:flex;gap:8px;justify-content:space-between}
 .plist .k{font-size:11px;padding:1px 6px;border-radius:6px;background:var(--accent-soft);color:var(--accent);white-space:nowrap;align-self:center}
+.inapp{background:var(--bad-bg);border:2px solid var(--bad);border-radius:var(--radius);padding:14px;margin-bottom:14px;font-size:15px}
+.inapp .t{font-size:17px;font-weight:800;color:var(--bad);margin-bottom:6px}
+.inapp ul{margin:6px 0 12px;padding-left:20px}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;max-width:90vw;z-index:9}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
 <div class="wrap">
+<div class="inapp" id="inappBanner" hidden>
+  <div class="t">⚠️ 你現在是在 <span id="inappName">LINE</span> 裡開啟，會<b>沒有聲音</b>，也不能用麥克風！</div>
+  <div>請改用手機的瀏覽器開啟：</div>
+  <ul>
+    <li><b>iPhone</b>：點畫面角落的「⋯」或分享鈕 → 選「<b>用 Safari 開啟</b>」</li>
+    <li><b>Android</b>：點右上角「⋮」→ 選「<b>用 Chrome／預設瀏覽器開啟</b>」</li>
+  </ul>
+  <div class="row">
+    <button class="primary grow" id="openExternal" hidden>用瀏覽器開啟</button>
+    <button class="grow" id="copyUrl">複製網址</button>
+  </div>
+</div>
 
 <!-- ========== HOME ========== -->
 <section id="home" class="screen on">
   <header><h1>📝 英文單字小考</h1></header>
+  <div class="note" id="browserTip" style="margin:0 0 14px">📢 請用 <b>Safari</b> 或 <b>Chrome</b> 瀏覽器開啟本頁。在 <b>LINE</b>、FB、IG 裡直接點開會<b>沒有聲音</b>，也不能用麥克風。iPhone 也要<b>關掉靜音模式</b>。</div>
 
   <div class="card">
     <h2>題庫</h2>
@@ -874,9 +890,9 @@ async function decodeBank(code){
 }
 async function shareBank(){
   if (!bank.items.length) return toast('題庫是空的');
-  const url = location.origin + location.pathname + '#bank=' + await encodeBank(bankText);
+  const url = location.origin + location.pathname + '?openExternalBrowser=1#bank=' + await encodeBank(bankText);  // LINE 會自動改用外部瀏覽器開啟
   if (navigator.share){
-    try { await navigator.share({title: '英文單字小考', text: `英文小考題庫（${bank.items.length} 題）`, url}); return; }
+    try { await navigator.share({title: '英文單字小考', text: `英文小考題庫（${bank.items.length} 題）｜請用 Safari 或 Chrome 開啟，在 LINE 裡開會沒有聲音`, url}); return; }
     catch(e){ if (e && e.name === 'AbortError') return; }
   }
   try { await navigator.clipboard.writeText(url); toast('已複製題庫連結，貼給別人就能直接考'); }
@@ -1149,6 +1165,32 @@ $('#againBtn').addEventListener('click', () => startQuiz(quiz.pool, false));
 $('#homeBtn').addEventListener('click', () => { renderHome(); show('home'); });
 
 /* ---------------- 啟動 ---------------- */
+/* ---------------- LINE／FB 內建瀏覽器偵測 ---------------- */
+const UA = navigator.userAgent || '';
+const INAPP = /\bLine\//i.test(UA) ? 'LINE' : /FBAN|FBAV|FB_IAB|FBIOS/.test(UA) ? 'Facebook' :
+              /Instagram/i.test(UA) ? 'Instagram' : /MicroMessenger/i.test(UA) ? '微信' : '';
+function externalUrl(){
+  const u = new URL(location.href);
+  u.searchParams.set('openExternalBrowser', '1');   // LINE 支援這個參數，會自動用外部瀏覽器開啟
+  return u.toString();
+}
+if (INAPP){
+  $('#inappName').textContent = INAPP;
+  $('#inappBanner').hidden = false;
+  $('#browserTip').hidden = true;
+  if (INAPP === 'LINE'){
+    $('#openExternal').hidden = false;
+    $('#openExternal').addEventListener('click', () => { location.href = externalUrl(); });
+    // 自動嘗試跳到外部瀏覽器一次（網址已帶參數就不再跳，避免無限循環）
+    if (!new URL(location.href).searchParams.has('openExternalBrowser')) location.replace(externalUrl());
+  }
+}
+$('#copyUrl').addEventListener('click', async () => {
+  const url = location.origin + location.pathname;
+  try { await navigator.clipboard.writeText(url); toast('已複製網址，請貼到 Safari 或 Chrome 開啟', 3500); }
+  catch(e){ prompt('複製這個網址，貼到 Safari 或 Chrome：', url); }
+});
+
 renderHome();
 loadFromHash();
 window.addEventListener('hashchange', loadFromHash);
