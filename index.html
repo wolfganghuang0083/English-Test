@@ -195,6 +195,17 @@ s{color:var(--bad)}
   </div>
 </section>
 
+<!-- ========== MINE ========== -->
+<section id="mine" class="screen">
+  <header><h1>📊 我的成績</h1><button class="primary" id="mineBack">返回</button></header>
+  <div class="seg" id="mineTabs" style="margin-bottom:14px">
+    <label><input type="radio" name="mineTab" value="history">成績紀錄</label>
+    <label><input type="radio" name="mineTab" value="wrong">錯題本</label>
+    <label><input type="radio" name="mineTab" value="all">全部單字</label>
+  </div>
+  <div id="minePanel"></div>
+</section>
+
 <!-- ========== TEACHER ========== -->
 <section id="teacher" class="screen">
   <header><h1>👩‍🏫 老師後台</h1><button class="primary" id="teacherBack">返回</button></header>
@@ -223,7 +234,10 @@ s{color:var(--bad)}
     <div class="lvbar" id="lvBar"></div>
     <div class="stat" id="lvStat"></div>
     <div class="wchips" id="wrongChips"></div>
-    <button class="primary block" id="reviewBtn">📕 錯題本複習</button>
+    <div class="row">
+      <button class="primary grow" id="reviewBtn">📕 錯題本複習</button>
+      <button class="soft grow" id="mineBtn">📊 我的成績</button>
+    </div>
     <p class="small muted" style="margin:8px 0 0">錯過的字要<b>連續答對 2 次</b>才會離開錯題本（錯 3 次以上要連續答對 3 次）。錯題複習會<b>由易到難</b>：選擇 → 克漏字 → 拼字 → 聽寫／整句。</p>
     <div class="small muted" id="syncStatus" style="margin-top:6px"></div>
   </div>
@@ -981,12 +995,14 @@ async function showStudent(id){
   try {
     const j = await api('studentDetail', {id});
     const zhOf = {}; bank.items.forEach(x => zhOf[x.key] = x.zh);
+    const sess = (j.sessions || []).slice(0, 10);
     const rows = j.words.map(p => Object.assign(p, {wb: inWrongBook(p)}))
       .sort((a, b) => (b.wb - a.wb) || (b.w - a.w) || (a.s - b.s));
     $('#tDetailList').innerHTML = rows.map(p => {
       const badge = p.wb ? '<span class="badge b-wrong">錯題</span>' : p.s >= 3 ? '<span class="badge b-m">熟練</span>' : '<span class="badge b-l">練習中</span>';
       return `<li><span><b>${h(p.key)}</b> <span class="muted">${h(zhOf[p.key] || '')}</span><br><span class="small muted">對 ${p.r} · 錯 ${p.w} · 連對 ${p.s} · ${fmtTime(p.t)}</span></span>${badge}</li>`;
     }).join('') || '<li class="muted">這位學生還沒有作答紀錄</li>';
+    if (sess.length) $('#tDetailList').innerHTML = '<li><b>最近的考試</b></li>' + historyRows(sess) + '<li><b>每個字的狀況</b></li>' + $('#tDetailList').innerHTML;
   } catch(e){ $('#tDetailList').innerHTML = `<li class="muted">讀取失敗：${h(e.message)}</li>`; }
 }
 $('#teacherBtn').addEventListener('click', () => show('teacher'));
@@ -1057,9 +1073,94 @@ function startApp(){
   loadFromHash();
 }
 
+/* ---------------- 我的成績（學生自己看） ---------------- */
+function localHistory(){ return store.get('history_' + userKey(), []) || []; }
+function saveLocalHistory(entry){
+  const list = localHistory().filter(x => x.id !== entry.id);
+  list.unshift(entry);
+  store.set('history_' + userKey(), list.slice(0, 200));
+}
+let mineTab = 'history';
+function openMine(tab){
+  mineTab = tab || mineTab;
+  show('mine');
+  renderMine();
+}
+function renderMine(){
+  document.querySelectorAll('#mineTabs input').forEach(r => r.checked = r.value === mineTab);
+  if (mineTab === 'history') renderHistory();
+  else if (mineTab === 'wrong') renderWrongBook();
+  else renderAllWords();
+}
+const pctOf = (ok, n) => n ? Math.round(ok / n * 100) : 0;
+function historyRows(list){
+  return list.map(s => {
+    const p = pctOf(s.ok, s.n);
+    const color = p >= 90 ? 'var(--ok)' : p >= 60 ? 'var(--accent)' : 'var(--bad)';
+    return `<li><span class="grow"><b>${fmtTime(s.t)}</b>${s.mode === 'review' ? ' <span class="badge b-wrong">錯題複習</span>' : ''}<br>
+      <span class="small muted">答對 ${s.ok} / ${s.n} 題${s.wrong && s.wrong.length ? '　錯：' + h(s.wrong.slice(0, 6).join('、')) + (s.wrong.length > 6 ? '…' : '') : ''}</span></span>
+      <b style="font-size:22px;color:${color};align-self:center">${p}</b></li>`;
+  }).join('');
+}
+async function renderHistory(){
+  const panel = $('#minePanel');
+  const draw = (list, note) => {
+    const n = list.reduce((a, s) => a + s.n, 0), ok = list.reduce((a, s) => a + s.ok, 0);
+    const avg = list.length ? Math.round(list.reduce((a, s) => a + pctOf(s.ok, s.n), 0) / list.length) : 0;
+    const best = list.reduce((a, s) => Math.max(a, pctOf(s.ok, s.n)), 0);
+    panel.innerHTML = `<div class="card"><div class="stat" style="margin:0"><div>考過 <b>${list.length}</b> 次</div><div>平均 <b>${avg}</b> 分</div><div>最高 <b>${best}</b> 分</div><div>總作答 <b>${n}</b> 題</div><div>正確率 <b>${pctOf(ok, n)}%</b></div></div>
+      ${note ? `<div class="small muted" style="margin-top:8px">${note}</div>` : ''}</div>
+      <div class="card"><h2>每次考試</h2><ul class="plist" style="max-height:none">${historyRows(list) || '<li class="muted">還沒有考試紀錄，去考一次吧！</li>'}</ul></div>`;
+  };
+  if (!isCloud()) return draw(localHistory(), '📱 紀錄存在這支手機');
+  draw(localHistory(), '☁️ 讀取雲端紀錄中…');
+  try {
+    await syncPending();
+    const j = await api('getHistory');
+    if (mineTab === 'history' && $('#mine').classList.contains('on')) draw(j.sessions, '☁️ 雲端紀錄（換手機登入也看得到）');
+  } catch(e){
+    if (mineTab === 'history') draw(localHistory(), '⚠️ 暫時連不上雲端，先顯示這支手機的紀錄');
+  }
+}
+function wordLine(x, extra){
+  const p = progress[x.key];
+  const lv = levelOf(x);
+  const badge = {wrong: '<span class="badge b-wrong">錯題</span>', mastered: '<span class="badge b-m">熟練</span>', learning: '<span class="badge b-l">練習中</span>', new: '<span class="badge" style="background:var(--line);color:var(--muted)">還沒考</span>'}[lv];
+  const word = x.clozeOnly ? x.cloze : x.en;
+  return `<li><span class="grow"><b>${h(word)}</b> <button class="say" data-say="${h(splitAlts(word)[0])}" aria-label="播放">🔊</button> <span class="muted">${h(x.zh)}</span>
+    ${p ? `<br><span class="small muted">對 ${p.r} · 錯 ${p.w} · 連續答對 ${p.s}${extra ? ' · ' + extra(p) : ''}</span>` : ''}
+    ${x.sentence && lv === 'wrong' ? `<br><span class="small">${clozeHTML(x.sentence, true)}</span>` : ''}</span>${badge}</li>`;
+}
+function bindSay(root){ root.querySelectorAll('[data-say]').forEach(b => b.addEventListener('click', () => { unlockTTS(); sayEn(b.dataset.say); })); }
+function renderWrongBook(){
+  const wrong = bank.items.filter(x => levelOf(x) === 'wrong').sort((a, b) => (progress[b.key].w - progress[a.key].w) || (progress[a.key].s - progress[b.key].s));
+  const left = p => `還要連續答對 <b>${Math.max(1, required(p.w) - p.s)}</b> 次`;
+  $('#minePanel').innerHTML = `<div class="card">
+      <div class="stat" style="margin:0 0 10px"><div>錯題本 <b style="color:var(--bad)">${wrong.length}</b> 個字</div></div>
+      <button class="primary block" id="mineReview" ${wrong.length ? '' : 'disabled'}>📕 開始錯題複習</button>
+      <p class="small muted" style="margin:8px 0 0">錯過的字要連續答對 2 次才會離開錯題本（錯 3 次以上要 3 次）。複習題目由易到難。</p></div>
+    <div class="card"><h2>錯得最多的在最上面</h2><ul class="plist" style="max-height:none">${wrong.map(x => wordLine(x, left)).join('') || '<li class="muted">錯題本是空的，太棒了！🎉</li>'}</ul></div>`;
+  bindSay($('#minePanel'));
+  $('#mineReview').addEventListener('click', () => startQuiz(wrong, 'review'));
+}
+function renderAllWords(){
+  const groups = groupsOf(bank.items);
+  $('#minePanel').innerHTML = groups.map(([g]) => {
+    const items = bank.items.filter(x => x.group === g);
+    const c = {mastered: 0, wrong: 0};
+    items.forEach(x => { const l = levelOf(x); if (c[l] !== undefined) c[l]++; });
+    return `<div class="card"><details><summary>${h(g || '未分類')} <span class="small muted">（${items.length} 字・熟練 ${c.mastered}・錯題 ${c.wrong}）</span></summary>
+      <ul class="plist" style="max-height:none">${items.map(x => wordLine(x)).join('')}</ul></details></div>`;
+  }).join('') || '<div class="card muted">題庫是空的</div>';
+  bindSay($('#minePanel'));
+}
+$('#mineTabs').addEventListener('change', e => { mineTab = e.target.value; renderMine(); });
+$('#mineBack').addEventListener('click', () => { renderHome(); show('home'); });
+$('#mineBtn').addEventListener('click', () => openMine('history'));
+
 /* ---------------- 畫面切換 ---------------- */
 // 手機的「返回」手勢／按鍵：回到首頁，而不是離開網站
-const SUB_SCREENS = ['quiz', 'bank', 'teacher', 'result'];
+const SUB_SCREENS = ['quiz', 'bank', 'teacher', 'result', 'mine'];
 function show(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
   if (SUB_SCREENS.includes(id) && !(history.state && history.state.sub)){ try { history.pushState({sub: true}, ''); } catch(e){} }
@@ -1545,7 +1646,7 @@ function startQuiz(pool, mode){
     if (t.length) qs.push(makeQuestion(item, pick(t)));
   }
   if (!qs.length) return toast('題庫裡沒有符合所選題型的題目，換個題型試試');
-  quiz = { qs, i: 0, results: [], pool, mode };
+  quiz = { qs, i: 0, results: [], pool, mode, qid: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) };
   show('quiz');
   renderQuestion();
 }
@@ -1669,7 +1770,7 @@ function submit(ans, viaVoice){
   quiz.answered = true;
   if (!quiz.results[quiz.i]){
     const prev = progress[it.key] ? Object.assign({}, progress[it.key]) : null;
-    const rec = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), t: Date.now(), key: it.key, en: it.clozeOnly ? plainSentence(it.sentence) : it.en, type: TYPES[q.type].label,
+    const rec = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), qid: quiz.qid, t: Date.now(), key: it.key, en: it.clozeOnly ? plainSentence(it.sentence) : it.en, type: TYPES[q.type].label,
                   ok, ans, correct: q.type === 'mc' ? it.zh : q.answers.join(' / ') };
     quiz.results[quiz.i] = { q, user: ans, ok, prev, rec };
     applyResult(it.key, ok);
@@ -1777,6 +1878,8 @@ function renderResult(){
   const wb = bank.items.filter(x => levelOf(x) === 'wrong').length;
   $('#resultInfo').textContent = `錯題本目前 ${wb} 個字` + (left ? `，這次有 ${left} 個字畢業了 🎓` : '');
   $('#resultInfo2').textContent = '';
+  if (rs.length) saveLocalHistory({id: quiz.qid, t: Date.now(), n: rs.length, ok: okN, mode: quiz.mode,
+    wrong: rs.filter(r => !r.ok).map(r => r.rec.en)});
   show('result');
   syncPending();
 }

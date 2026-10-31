@@ -36,7 +36,7 @@ function ss_() {
 var SHEETS = {
   users: { name: '帳號',     headers: ['帳號', '密碼', '姓名', '班級', '身分'] },
   bank:  { name: '題庫',     headers: ['單元', '打勾', '英文', '中文', '例句', '例句中文'] },
-  log:   { name: '作答紀錄', headers: ['時間', '帳號', '姓名', '班級', '單字', '題型', '對錯', '學生答案', '正確答案', '紀錄ID'] },
+  log:   { name: '作答紀錄', headers: ['時間', '帳號', '姓名', '班級', '單字', '題型', '對錯', '學生答案', '正確答案', '紀錄ID', '測驗ID'] },
   stats: { name: '單字狀態', headers: ['帳號', '單字', '答對次數', '答錯次數', '連續答對', '最後作答'] }
 };
 
@@ -132,13 +132,17 @@ function doPost(e) {
     switch (action) {
       case 'login':       return json_({ ok: true, user: { id: u.id, name: u.name, cls: u.cls, role: u.role } });
       case 'getProgress': return json_({ ok: true, progress: getProgress_(u.id) });
+      case 'getHistory':  return json_({ ok: true, sessions: getHistory_(u.id) });
       case 'saveResults': return json_(saveResults_(u, req.results));
     }
 
     if (u.role !== '老師') return json_({ ok: false, error: '只有老師可以使用這個功能' });
     switch (action) {
       case 'overview':      return json_(overview_());
-      case 'studentDetail': return json_({ ok: true, words: getProgressList_(String(req.id || '').toLowerCase()) });
+      case 'studentDetail': {
+        var sid = String(req.id || '').toLowerCase();
+        return json_({ ok: true, words: getProgressList_(sid), sessions: getHistory_(sid).slice(0, 20) });
+      }
       case 'saveBank':      return json_(saveBank_(req.items));
       case 'ocr':           return json_(ocr_(req.name, req.mime, req.data));
     }
@@ -251,6 +255,7 @@ function saveResults_(u, results) {
   try {
     var log = sheet_(SHEETS.log);
     if (log.getRange(1, 10).getValue() !== '紀錄ID') log.getRange(1, 10).setValue('紀錄ID').setFontWeight('bold').setBackground('#e8efff');
+    if (log.getRange(1, 11).getValue() !== '測驗ID') log.getRange(1, 11).setValue('測驗ID').setFontWeight('bold').setBackground('#e8efff');
     // 同一筆紀錄重送（網路逾時後補傳）時不要重複記錄
     var n = log.getLastRow() - 1, seen = {};
     if (n > 0) {
@@ -266,7 +271,7 @@ function saveResults_(u, results) {
     if (!results.length) return { ok: true, saved: 0 };
     var logRows = results.map(function (r) {
       return [new Date(r.t || Date.now()), u.id, u.name, u.cls, safe_(r.en), safe_(r.type),
-              r.ok ? '✓' : '✗', safe_(r.ans), safe_(r.correct), String(r.id || '').slice(0, 40)];
+              r.ok ? '✓' : '✗', safe_(r.ans), safe_(r.correct), String(r.id || '').slice(0, 40), String(r.qid || '').slice(0, 40)];
     });
     log.getRange(log.getLastRow() + 1, 1, logRows.length, logRows[0].length).setValues(logRows);
 
@@ -286,6 +291,26 @@ function saveResults_(u, results) {
     if (data.length) st.getRange(2, 1, data.length, 6).setValues(data);
     return { ok: true, saved: results.length };
   } finally { lock.releaseLock(); }
+}
+
+/** 每一次考試的成績：同一個測驗ID算一次；舊資料沒有測驗ID，就把間隔 10 分鐘以內的作答算同一次 */
+function getHistory_(id) {
+  var rows = rows_(SHEETS.log).filter(function (r) { return String(r[1]).toLowerCase() === id && r[0] instanceof Date; });
+  rows.sort(function (a, b) { return a[0].getTime() - b[0].getTime(); });
+  var sessions = {}, order = [], lastAuto = null;
+  rows.forEach(function (r) {
+    var t = r[0].getTime(), key;
+    if (r[10]) key = 'q:' + r[10];
+    else {
+      if (!lastAuto || t - lastAuto.end > 10 * 60 * 1000) lastAuto = { key: 'a:' + t, end: t };
+      lastAuto.end = t; key = lastAuto.key;
+    }
+    if (!sessions[key]) { sessions[key] = { t: t, n: 0, ok: 0, wrong: [] }; order.push(key); }
+    var s = sessions[key];
+    s.n++;
+    if (r[6] === '✓') s.ok++; else if (s.wrong.length < 30) s.wrong.push(String(r[4]));
+  });
+  return order.map(function (k) { return sessions[k]; }).sort(function (a, b) { return b.t - a.t; }).slice(0, 100);
 }
 
 /* ---------------- 老師後台 ---------------- */
