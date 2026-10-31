@@ -145,6 +145,15 @@ function auth_(user, pass) {
 /* ---------------- 題庫 ---------------- */
 function getBank_() {
   var rows = rows_(SHEETS.bank);
+  // 題庫是空的：寫入預設題庫（只做一次，老師之後清空也不會再自動寫入）
+  if (!rows.length && typeof SEED_BANK !== 'undefined' && SEED_BANK.length) {
+    var props = PropertiesService.getScriptProperties();
+    if (!props.getProperty('BANK_SEEDED')) {
+      saveBank_(SEED_BANK);
+      props.setProperty('BANK_SEEDED', '1');
+      rows = rows_(SHEETS.bank);
+    }
+  }
   var lines = [], group = null;
   rows.forEach(function (r) {
     var en = String(r[2] || '').trim();
