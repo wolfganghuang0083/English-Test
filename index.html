@@ -1,0 +1,993 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="英文小考">
+<meta name="description" content="上傳單字、片語與克漏字，用語音出題、打字或語音作答的英文小考工具">
+<title>英文單字小考</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<style>
+:root{
+  --bg:#f4f6fb;--card:#ffffff;--text:#1d2230;--muted:#667085;--line:#e3e7ef;
+  --accent:#2563eb;--accent-ink:#ffffff;--accent-soft:#e8efff;
+  --ok:#15803d;--ok-bg:#dcfce7;--bad:#c62828;--bad-bg:#fde2e2;--warn:#b45309;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 2px 8px rgba(16,24,40,.06);
+  --radius:16px;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0f1115;--card:#1a1d25;--text:#e9ecf2;--muted:#9aa3b5;--line:#2b303c;
+    --accent:#5b8cff;--accent-ink:#0b1020;--accent-soft:#1d2742;
+    --ok:#4ade80;--ok-bg:#13301f;--bad:#f87171;--bad-bg:#3a1717;--warn:#fbbf24;
+    --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg);color:var(--text);
+  font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:560px;margin:0 auto;padding:16px 16px calc(32px + env(safe-area-inset-bottom))}
+header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 14px}
+header h1{font-size:22px;margin:0;letter-spacing:.5px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px;box-shadow:var(--shadow)}
+.card h2{font-size:15px;margin:0 0 10px;color:var(--muted);font-weight:600}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grow{flex:1}
+button,.btn{
+  appearance:none;border:1px solid var(--line);background:var(--card);color:var(--text);
+  font:inherit;font-weight:600;border-radius:12px;padding:11px 14px;min-height:46px;cursor:pointer;
+  touch-action:manipulation;-webkit-tap-highlight-color:transparent;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px
+}
+button:active{transform:scale(.98)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.soft{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+button.ghost{background:transparent;border-color:transparent;color:var(--muted);padding:8px 10px;min-height:40px}
+button.block{width:100%}
+button.big{min-height:56px;font-size:18px}
+button:disabled{opacity:.45}
+.chips{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chip{display:flex;gap:10px;align-items:flex-start;border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer;user-select:none}
+.chip input{margin:4px 0 0;width:18px;height:18px;accent-color:var(--accent);flex:none}
+.chip b{display:block;font-size:15px}
+.chip span{font-size:12px;color:var(--muted)}
+.chip:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
+.seg label{flex:1;text-align:center;padding:9px 4px;border-radius:9px;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted)}
+.seg input{display:none}
+.seg label:has(input:checked){background:var(--card);color:var(--text);box-shadow:var(--shadow);outline:1px solid var(--line)}
+.field{margin-top:14px}
+.field>.lbl{font-size:14px;font-weight:600;margin-bottom:6px;display:flex;justify-content:space-between}
+select,input[type=text],textarea{
+  width:100%;font:inherit;color:var(--text);background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px;outline:none
+}
+select{min-height:46px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+select:focus,input[type=text]:focus,textarea:focus{border-color:var(--accent)}
+textarea{min-height:46vh;font-size:14px;line-height:1.6;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"PingFang TC",monospace;resize:vertical}
+.stat{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
+.stat div{background:var(--bg);border-radius:10px;padding:6px 10px;font-size:13px}
+.stat b{font-size:16px}
+.screen{display:none}
+.screen.on{display:block}
+.note{font-size:13px;border-radius:10px;padding:10px 12px;background:var(--accent-soft);color:var(--text);margin-top:10px}
+.note.warn{background:var(--bad-bg)}
+details summary{cursor:pointer;font-weight:600;padding:4px 0}
+details pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+details pre{background:var(--bg);padding:10px;border-radius:10px;white-space:pre-wrap;word-break:break-word}
+
+/* quiz */
+.qtop{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.bar{flex:1;height:8px;background:var(--line);border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s}
+.qmeta{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--accent-soft);color:var(--accent)}
+.prompt{min-height:120px;display:flex;flex-direction:column;justify-content:center;gap:10px;text-align:center;padding:8px 0}
+.prompt .big{font-size:30px;font-weight:700;line-height:1.3;word-break:break-word}
+.prompt .sentence{font-size:21px;line-height:1.6;text-align:left}
+.prompt .hint-zh{font-size:15px;color:var(--muted);text-align:left}
+.prompt .hidden-prompt{font-size:18px;color:var(--muted)}
+.blank{display:inline-block;min-width:4.5em;border-bottom:3px solid var(--accent);margin:0 3px;height:1.1em;vertical-align:-2px}
+.instr{font-size:14px;color:var(--muted);text-align:center;margin-bottom:10px}
+.ansrow{display:flex;gap:8px}
+.ansrow input{font-size:20px;padding:12px 14px;min-height:54px}
+.mic{margin-top:10px}
+.mic.rec{background:var(--bad);border-color:var(--bad);color:#fff;animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.75}}
+.opts{display:grid;gap:10px}
+.opts button{justify-content:flex-start;text-align:left;font-size:18px;min-height:56px;padding:12px 16px}
+.opts button.right{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.opts button.wrong{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+.hintline{font-family:ui-monospace,Menlo,monospace;letter-spacing:3px;text-align:center;font-size:20px;margin-top:10px;color:var(--warn)}
+.fb{border-radius:14px;padding:14px;margin-top:14px}
+.fb.ok{background:var(--ok-bg)}
+.fb.bad{background:var(--bad-bg)}
+.fb .t{font-size:20px;font-weight:800;margin-bottom:6px}
+.fb.ok .t{color:var(--ok)}.fb.bad .t{color:var(--bad)}
+.fb .line{margin:4px 0;word-break:break-word}
+.fb .ex{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+.fb .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.fb .actions button{flex:1;white-space:nowrap;padding:11px 8px}
+.say{border:none;background:none;padding:0 4px;min-height:0;font-size:18px;cursor:pointer;vertical-align:middle}
+s{color:var(--bad)}
+
+/* result */
+.score{text-align:center;padding:10px 0}
+.score .n{font-size:56px;font-weight:800;line-height:1}
+.score .d{color:var(--muted);margin-top:4px}
+.rlist{list-style:none;margin:0;padding:0}
+.rlist li{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);align-items:flex-start}
+.rlist li:last-child{border-bottom:none}
+.rlist .ic{font-size:18px;flex:none}
+.rlist .en{font-weight:700;word-break:break-word}
+.plist{list-style:none;margin:8px 0 0;padding:0;max-height:240px;overflow:auto;font-size:14px}
+.plist li{padding:6px 0;border-bottom:1px solid var(--line);display:flex;gap:8px;justify-content:space-between}
+.plist .k{font-size:11px;padding:1px 6px;border-radius:6px;background:var(--accent-soft);color:var(--accent);white-space:nowrap;align-self:center}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;max-width:90vw;z-index:9}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ========== HOME ========== -->
+<section id="home" class="screen on">
+  <header><h1>📝 英文單字小考</h1></header>
+
+  <div class="card">
+    <h2>題庫</h2>
+    <div class="stat" id="bankStat"></div>
+    <div class="row">
+      <button class="soft grow" id="goBank">✏️ 上傳／編輯題庫</button>
+      <button class="ghost" id="shareBank" title="把題庫做成連結分享">🔗 分享</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>考試設定</h2>
+    <div class="lbl" style="font-size:14px;font-weight:600;margin-bottom:6px">題型（可複選）</div>
+    <div class="chips" id="typeChips"></div>
+
+    <div class="field">
+      <div class="lbl">題目怎麼出</div>
+      <div class="seg" id="promptSeg">
+        <label><input type="radio" name="prompt" value="both">文字＋語音</label>
+        <label><input type="radio" name="prompt" value="voice">只用語音</label>
+        <label><input type="radio" name="prompt" value="text">只有文字</label>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="lbl">題數</div>
+      <select id="count">
+        <option value="5">5 題</option>
+        <option value="10">10 題</option>
+        <option value="20">20 題</option>
+        <option value="30">30 題</option>
+        <option value="all">全部</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <div class="lbl"><span>語音速度</span><span id="rateVal" class="muted"></span></div>
+      <input type="range" id="rate" min="0.5" max="1.2" step="0.05">
+    </div>
+
+    <div id="micNote" class="note warn" hidden>這個瀏覽器不支援語音作答（仍可打字作答）。建議用 iPhone 的 Safari 或 Android 的 Chrome 開啟，不要用 LINE 內建瀏覽器。</div>
+  </div>
+
+  <button class="primary block big" id="startBtn">開始考試 ▶</button>
+  <div style="height:10px"></div>
+  <button class="block" id="reviewBtn" hidden></button>
+
+  <div class="card" style="margin-top:14px">
+    <details>
+      <summary>怎麼作答？</summary>
+      <ul class="small" style="padding-left:18px;margin:8px 0 0">
+        <li><b>打字</b>：直接輸入英文後按「確認」或 Enter。</li>
+        <li><b>語音</b>：按 🎤，可以<b>直接唸單字</b>，也可以<b>一個一個字母拼</b>（例如「W‧O‧R‧D」）。</li>
+        <li>不會的時候按「💡 提示」看第一個字母和字數。</li>
+        <li>語音辨識聽錯時，可按「再試一次」或「算我對」。</li>
+        <li>答錯的字會記在「錯題本」，之後可以只練錯的。</li>
+      </ul>
+    </details>
+  </div>
+</section>
+
+<!-- ========== BANK ========== -->
+<section id="bank" class="screen">
+  <header>
+    <h1>✏️ 題庫</h1>
+    <button class="primary" id="bankDone">完成</button>
+  </header>
+
+  <div class="card">
+    <div class="row">
+      <label class="btn soft grow" for="fileInput">📄 上傳檔案</label>
+      <input type="file" id="fileInput" accept=".txt,.csv,.tsv,text/plain,text/csv" hidden>
+      <button id="loadSample">載入範例</button>
+      <button class="ghost" id="clearBank">清空</button>
+    </div>
+    <p class="small muted" style="margin:10px 0 0">可上傳 .txt / .csv，或從 Excel、Google 試算表直接複製貼上（欄位：英文、中文、例句）。</p>
+  </div>
+
+  <textarea id="bankText" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="apple | 蘋果 | I eat an [apple] every day."></textarea>
+
+  <div class="card" style="margin-top:14px">
+    <h2 id="parseSum">辨識結果</h2>
+    <ul class="plist" id="parseList"></ul>
+  </div>
+
+  <div class="card">
+    <details open>
+      <summary>題庫格式</summary>
+      <pre># 每行一題，用 | 分隔：英文 | 中文 | 例句
+apple | 蘋果 | I eat an [apple] every day.
+look forward to | 期待 | I'm [looking forward to] it.
+You can definitely do it. | 你絕對可以的。
+
+# 克漏字：把答案用 [ ] 括起來 | 中文提示
+He is good [at] playing basketball. | 他很擅長打籃球。
+
+# 同義答案用 / 分開
+movie/film | 電影</pre>
+      <ul class="small muted" style="padding-left:18px;margin:6px 0 0">
+        <li>例句裡的單字若沒加 [ ]，會自動找出來挖空（含 -s / -ed / -ing 變化）。</li>
+        <li>不規則變化（go → went）請自己用 [ ] 標出。</li>
+        <li>也接受「apple 蘋果」這種英文後面直接接中文的寫法。</li>
+        <li># 開頭的行是註解，不會出題。</li>
+      </ul>
+    </details>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>🤖 手上只有考卷照片或 PDF？</summary>
+      <p class="small">把考卷照片／檔案丟給 Claude（或其他 AI），連同下面這段指令，再把它回傳的內容貼到上面的框框。</p>
+      <pre id="aiPrompt"></pre>
+      <button class="soft block" id="copyPrompt">複製指令</button>
+    </details>
+  </div>
+</section>
+
+<!-- ========== QUIZ ========== -->
+<section id="quiz" class="screen">
+  <div class="qtop">
+    <button class="ghost" id="quitBtn" aria-label="結束">✕</button>
+    <div class="bar"><i id="qBar"></i></div>
+    <span class="small muted" id="qProgress"></span>
+  </div>
+
+  <div class="card">
+    <div class="qmeta">
+      <span class="tag" id="qType"></span>
+      <button class="soft" id="replayBtn" style="min-height:38px;padding:6px 12px">🔊 再聽一次</button>
+    </div>
+    <div class="prompt" id="qPrompt"></div>
+  </div>
+
+  <div class="card" id="answerCard">
+    <div class="instr" id="qInstr"></div>
+    <div id="answerArea"></div>
+    <div id="feedback"></div>
+  </div>
+</section>
+
+<!-- ========== RESULT ========== -->
+<section id="result" class="screen">
+  <header><h1>🎉 考完了</h1></header>
+  <div class="card score">
+    <div class="n" id="scoreN"></div>
+    <div class="d" id="scoreD"></div>
+  </div>
+  <div class="row" style="margin-bottom:14px">
+    <button class="primary grow big" id="retryWrong">只練答錯的</button>
+    <button class="grow big" id="againBtn">再考一次</button>
+  </div>
+  <div class="card">
+    <h2>作答紀錄</h2>
+    <ul class="rlist" id="rlist"></ul>
+  </div>
+  <button class="block" id="homeBtn">回首頁</button>
+</section>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+/* ---------------- 範例題庫 ---------------- */
+const SAMPLE = `# 英文單字小考｜範例題庫（可以整個換成你自己的）
+# 格式：英文 | 中文 | 例句（要考的字用 [ ] 括起來，也可以不寫例句）
+
+apple | 蘋果 | I eat an [apple] every day.
+library | 圖書館 | We borrowed some books from the library.
+borrow | 借（入） | Can I borrow your pen?
+delicious | 美味的 | The cake smells delicious.
+weather | 天氣 | The weather is nice today.
+practice | 練習 | You need to practice every day.
+important | 重要的 | Sleep is important for your health.
+go | 去 | Yesterday she [went] to the park.
+movie/film | 電影 | We watched a [movie] last night.
+
+# 片語
+look forward to | 期待 | I'm looking forward to the trip.
+take care of | 照顧 | She takes care of her little brother.
+give up | 放棄 | Never give up on your dreams.
+
+# 整句翻譯（中翻英）
+You can definitely do it. | 你絕對可以的。
+Don't give up. | 不要放棄。
+How do you say this in English? | 這個用英文怎麼說？
+
+# 克漏字（答案用 [ ] 括起來 | 中文提示）
+He is good [at] playing basketball. | 他很擅長打籃球。
+I have [never] been to Japan. | 我從來沒去過日本。
+It is [too] hot to go outside. | 天氣太熱了，不能出門。
+`;
+
+const AI_PROMPT = `請把我附上的英文考卷／單字表，整理成下面的格式，每行一題，只輸出結果，不要其他說明：
+
+英文 | 中文意思 | 例句
+
+規則：
+1. 例句中要考的字或片語用 [ ] 括起來，例如：Yesterday she [went] to the park.
+2. 克漏字題目寫成：完整句子並把答案用 [ ] 括起來 | 中文翻譯
+   例如：He is good [at] playing basketball. | 他很擅長打籃球。
+3. 要考「中文翻成英文」的句子寫成：英文句子 | 中文句子
+4. 有多個正確答案用 / 分開，例如：movie/film | 電影
+5. 考卷上沒有例句的單字，請幫我補一句簡單的例句，並把該字用 [ ] 括起來。
+6. 用 # 開頭的行當作分類標題（例如 # 單字、# 片語、# 克漏字）。`;
+
+const TYPES = {
+  zh2en:  {label:'中翻英',   desc:'看／聽中文，拼出英文'},
+  listen: {label:'聽音拼字', desc:'聽英文發音，拼出來'},
+  cloze:  {label:'克漏字',   desc:'句子填空'},
+  mc:     {label:'英翻中選擇', desc:'選出正確中文'}
+};
+
+/* ---------------- 儲存 ---------------- */
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem('evq_'+k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('evq_'+k, JSON.stringify(v)); }catch(e){} }
+};
+const DEFAULTS = {types:['zh2en','listen','cloze'], prompt:'both', count:'10', rate:0.9};
+let settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
+let bankText = store.get('bankText', null);
+if (bankText == null) bankText = SAMPLE;
+let bank = parseBank(bankText);
+let wrongKeys = new Set(store.get('wrongKeys', []));
+let quiz = null;
+
+const $ = s => document.querySelector(s);
+const h = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const pick = a => a[Math.floor(Math.random() * a.length)];
+
+function toast(msg, ms){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('on'), ms || 2200);
+}
+
+/* ---------------- 題庫解析 ---------------- */
+const CJK = '\\u3000-\\u303f\\u3400-\\u9fff\\uf900-\\ufaff\\uff00-\\uffef';
+const RE_EN_THEN_ZH = new RegExp('^([^' + CJK + ']*?[A-Za-z][^' + CJK + ']*?)\\s*[:：=＝]?\\s*([' + CJK + '].*)$');
+
+function splitLine(line){
+  if (/[|｜]/.test(line)) return line.split(/[|｜]/);
+  if (line.includes('\t')) return line.split('\t');
+  const m = line.match(RE_EN_THEN_ZH);
+  if (m) return [m[1].replace(/[\s\-–—:,]+$/, ''), m[2]];
+  return [line];
+}
+
+function esc(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function variants(word){
+  const w = word.toLowerCase();
+  const v = new Set([w, w+'s', w+'es', w+'ed', w+'d', w+'ing', w+"'s"]);
+  if (/e$/.test(w)) v.add(w.slice(0, -1) + 'ing');
+  if (/[^aeiou]y$/.test(w)){ v.add(w.slice(0, -1) + 'ies'); v.add(w.slice(0, -1) + 'ied'); }
+  if (/[^aeiou][aeiou][bdgklmnprt]$/.test(w)){ v.add(w + w.slice(-1) + 'ing'); v.add(w + w.slice(-1) + 'ed'); }
+  return [...v].sort((a, b) => b.length - a.length);
+}
+
+// 例句沒有 [ ] 時，自動把要考的字標出來
+function markCloze(sentence, en){
+  if (/\[[^\]]+\]/.test(sentence)) return sentence;
+  for (const alt of splitAlts(en)){
+    const words = alt.split(/\s+/);
+    if (!words[0] || !/[A-Za-z]/.test(words[0])) continue;
+    const rest = words.slice(1).map(esc).join('\\s+');
+    const pats = variants(words[0]).map(f => esc(f) + (rest ? '\\s+' + rest : ''));
+    const re = new RegExp('(^|[^A-Za-z])(' + pats.join('|') + ')(?![A-Za-z])', 'i');
+    const m = sentence.match(re);
+    if (m){
+      const start = m.index + m[1].length;
+      return sentence.slice(0, start) + '[' + m[2] + ']' + sentence.slice(start + m[2].length);
+    }
+  }
+  return sentence;
+}
+
+function splitAlts(s){ return String(s).split('/').map(x => x.trim()).filter(Boolean); }
+
+function parseBank(text){
+  const items = [], skipped = [], seen = new Set();
+  String(text || '').split(/\r?\n/).forEach((raw, idx) => {
+    const line = raw.trim();
+    if (!line || line.startsWith('#') || line.startsWith('//')) return;
+    const parts = splitLine(line).map(s => s.trim());
+    let first = (parts[0] || '').replace(/\((?:n|v|vt|vi|adj|adv|prep|conj|pron|phr|ph|aux)\.?\)/gi, '').replace(/\s+/g, ' ').trim();
+    const zh = parts[1] || '';
+    const sentence = parts.slice(2).filter(Boolean).join(' ').trim();
+    if (!/[A-Za-z]/.test(first)){ skipped.push(idx + 1); return; }
+    let item;
+    if (/\[[^\]]+\]/.test(first)){
+      item = { en: first.replace(/\[([^\]]+)\]/g, '$1').replace(/\s+/g, ' ').trim(), zh, sentence: first, clozeOnly: true };
+    } else {
+      item = { en: first, zh, sentence: sentence ? markCloze(sentence, first) : '', clozeOnly: false };
+    }
+    item.cloze = ((item.sentence.match(/\[([^\]]+)\]/) || [])[1] || '').trim();
+    item.key = item.en.toLowerCase() + (item.clozeOnly ? '|' + item.cloze.toLowerCase() : '');
+    if (seen.has(item.key)) return;
+    seen.add(item.key);
+    items.push(item);
+  });
+  return { items, skipped };
+}
+
+/* ---------------- 答案比對 ---------------- */
+const CONTRACTIONS = [
+  [/\bcan't\b/g, 'cannot'], [/\bcan not\b/g, 'cannot'], [/\bwon't\b/g, 'will not'], [/\bshan't\b/g, 'shall not'],
+  [/n't\b/g, ' not'], [/'m\b/g, ' am'], [/'re\b/g, ' are'], [/'ll\b/g, ' will'], [/'ve\b/g, ' have'], [/'d\b/g, ' would'],
+  [/\b(it|that|what|there|here|he|she|who|where|how)'s\b/g, '$1 is'], [/\blet's\b/g, 'let us']
+];
+function norm(s){
+  return String(s).toLowerCase().replace(/[’‘`´]/g, "'").replace(/[^a-z0-9'\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function forms(s){
+  const n = norm(s);
+  let e = n; for (const [re, r] of CONTRACTIONS) e = e.replace(re, r);
+  e = e.replace(/\s+/g, ' ').trim();
+  return [n, e, n.replace(/'/g, ''), e.replace(/'/g, '')];
+}
+function matches(input, answers){
+  const fi = forms(input).filter(Boolean);
+  if (!fi.length) return false;
+  return answers.some(a => { const fa = forms(a); return fi.some(x => fa.includes(x)); });
+}
+function similarity(a, b){
+  a = norm(a); b = norm(b);
+  if (!a || !b) return 0;
+  const m = a.length, n = b.length; let prev = Array.from({length: n + 1}, (_, j) => j);
+  for (let i = 1; i <= m; i++){
+    const cur = [i];
+    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return 1 - prev[n] / Math.max(m, n);
+}
+
+/* ---------------- 語音：朗讀 ---------------- */
+const canTTS = 'speechSynthesis' in window;
+let voices = [];
+function loadVoices(){ if (canTTS) voices = speechSynthesis.getVoices(); }
+if (canTTS){ loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+function pickVoice(lang){
+  const L = lang.toLowerCase();
+  const same = v => v.lang.toLowerCase().replace('_', '-') === L;
+  const good = /google|siri|enhanced|premium|natural|samantha|mei-jia|meijia/i;
+  return voices.find(v => same(v) && good.test(v.name)) || voices.find(same) ||
+         voices.find(v => v.lang.toLowerCase().startsWith(L.slice(0, 2)));
+}
+function speak(text, lang){
+  if (!canTTS || !text) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = lang; const v = pickVoice(lang); if (v) u.voice = v;
+  u.rate = +settings.rate || 0.9;
+  speechSynthesis.speak(u);
+}
+const sayEn = t => speak(t, 'en-US');
+const sayZh = t => speak(t, 'zh-TW');
+
+/* ---------------- 語音：辨識 ---------------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false;
+
+const LETTERS = {
+  a:'a',ay:'a',eh:'a',b:'b',be:'b',bee:'b',c:'c',see:'c',sea:'c',cee:'c',d:'d',dee:'d',e:'e',ee:'e',
+  f:'f',ef:'f',eff:'f',g:'g',gee:'g',ji:'g',h:'h',aitch:'h',edge:'h',i:'i',eye:'i',aye:'i',j:'j',jay:'j',
+  k:'k',kay:'k',l:'l',el:'l',ell:'l',m:'m',em:'m',n:'n',en:'n',o:'o',oh:'o',owe:'o',p:'p',pee:'p',pea:'p',
+  q:'q',queue:'q',cue:'q',r:'r',are:'r',ar:'r',s:'s',es:'s',ess:'s',t:'t',tea:'t',tee:'t',u:'u',you:'u',
+  v:'v',vee:'v',w:'w',x:'x',ex:'x',y:'y',why:'y',wye:'y',z:'z',zee:'z',zed:'z'
+};
+// 把「W O R D」「double u oh are dee」這種拼字轉成 word
+function parseSpelled(t){
+  const toks = String(t).toLowerCase().replace(/double[\s-]*(u|you)\b/g, ' w ').split(/[\s\-.,·]+/).filter(Boolean);
+  if (toks.length < 2) return null;
+  let out = '';
+  for (const tk of toks){
+    if (/^[a-z]$/.test(tk)) out += tk;
+    else if (LETTERS[tk]) out += LETTERS[tk];
+    else return null;
+  }
+  return out;
+}
+function voiceCandidates(alts, answers){
+  const multiWord = answers.some(a => /\s/.test(a.trim()));
+  const out = [];
+  for (const t of alts){
+    const sp = parseSpelled(t);
+    if (multiWord){ out.push(t.trim()); if (sp) out.push(sp); }
+    else { if (sp) out.push(sp); out.push(t.trim()); }
+  }
+  return out.filter(Boolean);
+}
+function recognize(){
+  return new Promise((resolve, reject) => {
+    rec = new SR();
+    rec.lang = 'en-US'; rec.interimResults = false; rec.maxAlternatives = 5; rec.continuous = false;
+    let done = false;
+    rec.onresult = e => {
+      done = true;
+      const res = e.results[0]; const alts = [];
+      for (let i = 0; i < res.length; i++) alts.push(res[i].transcript);
+      resolve(alts);
+    };
+    rec.onerror = e => { if (!done){ done = true; reject(e.error || 'error'); } };
+    rec.onend = () => { if (!done){ done = true; reject('no-speech'); } };
+    rec.start();
+  });
+}
+function srErrorMsg(err){
+  if (err === 'not-allowed' || err === 'service-not-allowed') return '麥克風權限被拒絕，請到瀏覽器設定允許使用麥克風';
+  if (err === 'no-speech') return '沒聽到聲音，再按一次 🎤 試試看';
+  if (err === 'network') return '語音辨識需要網路連線';
+  if (err === 'aborted') return '已停止';
+  return '語音辨識失敗：' + err;
+}
+
+/* ---------------- 畫面切換 ---------------- */
+function show(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
+  window.scrollTo(0, 0);
+  if (id !== 'quiz'){ if (canTTS) speechSynthesis.cancel(); stopListening(); }
+}
+
+/* ---------------- 首頁 ---------------- */
+function renderHome(){
+  const it = bank.items;
+  const phrases = it.filter(x => !x.clozeOnly && /\s/.test(x.en)).length;
+  const words = it.filter(x => !x.clozeOnly && !/\s/.test(x.en)).length;
+  const cloze = it.filter(x => x.cloze).length;
+  $('#bankStat').innerHTML = it.length
+    ? `<div>共 <b>${it.length}</b> 題</div><div>單字 <b>${words}</b></div><div>片語／句子 <b>${phrases}</b></div><div>可考克漏字 <b>${cloze}</b></div>`
+    : '<div>題庫是空的，請先上傳或貼上單字</div>';
+
+  $('#typeChips').innerHTML = Object.entries(TYPES).map(([k, t]) =>
+    `<label class="chip"><input type="checkbox" value="${k}" ${settings.types.includes(k) ? 'checked' : ''}><div><b>${t.label}</b><span>${t.desc}</span></div></label>`).join('');
+  document.querySelectorAll('#promptSeg input').forEach(r => r.checked = r.value === settings.prompt);
+  $('#count').value = settings.count;
+  $('#rate').value = settings.rate;
+  $('#rateVal').textContent = (+settings.rate).toFixed(2) + 'x';
+  $('#micNote').hidden = !!SR;
+
+  const wrongItems = it.filter(x => wrongKeys.has(x.key));
+  $('#reviewBtn').hidden = !wrongItems.length;
+  $('#reviewBtn').textContent = `📕 複習錯題本（${wrongItems.length}）`;
+}
+function saveSettings(){ store.set('settings', settings); }
+
+$('#typeChips').addEventListener('change', () => {
+  settings.types = [...document.querySelectorAll('#typeChips input:checked')].map(x => x.value);
+  saveSettings();
+});
+$('#promptSeg').addEventListener('change', e => { settings.prompt = e.target.value; saveSettings(); });
+$('#count').addEventListener('change', e => { settings.count = e.target.value; saveSettings(); });
+$('#rate').addEventListener('input', e => { settings.rate = +e.target.value; $('#rateVal').textContent = settings.rate.toFixed(2) + 'x'; saveSettings(); });
+$('#rate').addEventListener('change', () => sayEn('This is the speaking speed.'));
+$('#startBtn').addEventListener('click', () => startQuiz(bank.items));
+$('#reviewBtn').addEventListener('click', () => startQuiz(bank.items.filter(x => wrongKeys.has(x.key)), true));
+$('#goBank').addEventListener('click', openBank);
+$('#shareBank').addEventListener('click', shareBank);
+
+/* ---------------- 題庫編輯 ---------------- */
+let parseTimer = null;
+function openBank(){
+  $('#bankText').value = bankText;
+  renderParse();
+  show('bank');
+}
+function renderParse(){
+  const p = parseBank($('#bankText').value);
+  const cloze = p.items.filter(x => x.cloze).length;
+  $('#parseSum').textContent = `辨識到 ${p.items.length} 題（可考克漏字 ${cloze} 題）` + (p.skipped.length ? `，第 ${p.skipped.slice(0, 5).join('、')} 行無法辨識` : '');
+  $('#parseList').innerHTML = p.items.slice(0, 300).map(x => {
+    const kind = x.clozeOnly ? '克漏字' : (/\s/.test(x.en) ? '片語／句' : '單字') + (x.cloze ? '＋克漏字' : '');
+    return `<li><span><b>${h(x.clozeOnly ? x.sentence : x.en)}</b> <span class="muted">${h(x.zh)}</span></span><span class="k">${kind}</span></li>`;
+  }).join('') || '<li class="muted">還沒有題目</li>';
+}
+function commitBank(){
+  bankText = $('#bankText').value;
+  store.set('bankText', bankText);
+  bank = parseBank(bankText);
+}
+$('#bankText').addEventListener('input', () => {
+  clearTimeout(parseTimer);
+  parseTimer = setTimeout(() => { renderParse(); commitBank(); }, 300);
+});
+$('#bankDone').addEventListener('click', () => { commitBank(); renderHome(); show('home'); });
+$('#loadSample').addEventListener('click', () => {
+  if ($('#bankText').value.trim() && !confirm('要用範例取代目前的題庫嗎？')) return;
+  $('#bankText').value = SAMPLE; renderParse(); commitBank();
+});
+$('#clearBank').addEventListener('click', () => {
+  if (!confirm('確定要清空題庫？')) return;
+  $('#bankText').value = ''; renderParse(); commitBank();
+});
+
+function parseCSV(text){
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (q){
+      if (c === '"'){ if (text[i + 1] === '"'){ cell += '"'; i++; } else q = false; }
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r'){
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell); rows.push(row); row = []; cell = '';
+    } else cell += c;
+  }
+  if (cell || row.length){ row.push(cell); rows.push(row); }
+  return rows;
+}
+async function readFileText(file){
+  const buf = await file.arrayBuffer();
+  let text = new TextDecoder('utf-8').decode(buf);
+  if (text.includes('�')){
+    try { text = new TextDecoder('big5').decode(buf); } catch(e){}
+  }
+  return text.replace(/^﻿/, '');
+}
+$('#fileInput').addEventListener('change', async e => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  if (/\.(xlsx?|docx?|pdf|jpe?g|png|heic)$/i.test(file.name)){
+    toast('這個檔案格式無法直接讀取：Excel 請另存成 CSV，或直接複製貼上；照片／PDF 請用下方「AI 轉換」', 4500);
+    return;
+  }
+  let text = await readFileText(file);
+  if (/\.csv$/i.test(file.name)){
+    text = parseCSV(text).filter(r => r.some(c => c.trim())).map(r => r.map(c => c.replace(/[|\n\r]/g, ' ').trim()).join(' | ')).join('\n');
+  }
+  const cur = $('#bankText').value.trim();
+  if (cur && cur !== SAMPLE.trim() && !confirm('要用這個檔案「取代」目前的題庫嗎？\n（按取消＝加到最後面）')){
+    $('#bankText').value = cur + '\n\n# ' + file.name + '\n' + text;
+  } else {
+    $('#bankText').value = text;
+  }
+  renderParse(); commitBank();
+  toast(`已讀取 ${file.name}`);
+});
+$('#aiPrompt').textContent = AI_PROMPT;
+$('#copyPrompt').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(AI_PROMPT); toast('已複製指令'); }
+  catch(e){ toast('無法自動複製，請長按上方文字手動複製'); }
+});
+
+/* ---------------- 分享題庫連結 ---------------- */
+function b64u(bytes){
+  let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function unb64u(s){
+  s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '=';
+  const bin = atob(s); const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function encodeBank(text){
+  const bytes = new TextEncoder().encode(text);
+  if ('CompressionStream' in window){
+    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    return 'z' + b64u(new Uint8Array(await new Response(stream).arrayBuffer()));
+  }
+  return 'p' + b64u(bytes);
+}
+async function decodeBank(code){
+  const bytes = unb64u(code.slice(1));
+  if (code[0] === 'z'){
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return await new Response(stream).text();
+  }
+  return new TextDecoder().decode(bytes);
+}
+async function shareBank(){
+  if (!bank.items.length) return toast('題庫是空的');
+  const url = location.origin + location.pathname + '#bank=' + await encodeBank(bankText);
+  if (navigator.share){
+    try { await navigator.share({title: '英文單字小考', text: `英文小考題庫（${bank.items.length} 題）`, url}); return; }
+    catch(e){ if (e && e.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(url); toast('已複製題庫連結，貼給別人就能直接考'); }
+  catch(e){ prompt('複製這個連結：', url); }
+}
+async function loadFromHash(){
+  const m = location.hash.match(/^#bank=([A-Za-z0-9_-]+)/);
+  if (!m) return;
+  try {
+    const text = await decodeBank(m[1]);
+    const n = parseBank(text).items.length;
+    history.replaceState(null, '', location.pathname + location.search);
+    if (text.trim() !== bankText.trim() && confirm(`收到分享的題庫（${n} 題），要載入嗎？\n會取代目前的題庫。`)){
+      bankText = text; store.set('bankText', bankText); bank = parseBank(bankText); renderHome();
+      toast('已載入題庫');
+    }
+  } catch(e){ toast('題庫連結無法讀取'); }
+}
+
+/* ---------------- 出題 ---------------- */
+function eligibleTypes(item, sel, hasMC){
+  const t = [];
+  if (sel.includes('cloze') && item.cloze) t.push('cloze');
+  if (item.clozeOnly && t.length) return t;   // 克漏字題目優先考克漏字
+  if (sel.includes('zh2en') && item.zh) t.push('zh2en');
+  if (sel.includes('listen')) t.push('listen');
+  if (sel.includes('mc') && item.zh && hasMC) t.push('mc');
+  return t;
+}
+function makeQuestion(item, type){
+  const q = { item, type, answers: splitAlts(type === 'cloze' ? item.cloze : item.en) };
+  if (type === 'mc'){
+    const others = shuffle([...new Set(bank.items.filter(x => x.zh && x.zh !== item.zh).map(x => x.zh))]).slice(0, 3);
+    q.options = shuffle([item.zh, ...others]);
+  }
+  return q;
+}
+function startQuiz(pool, isReview){
+  if (!settings.types.length) return toast('請至少勾選一種題型');
+  if (!pool.length) return toast('題庫是空的，請先上傳單字');
+  const hasMC = new Set(bank.items.filter(x => x.zh).map(x => x.zh)).size >= 2;
+  const n = settings.count === 'all' || isReview ? Infinity : +settings.count;
+  const qs = [];
+  for (const item of shuffle(pool.slice())){
+    if (qs.length >= n) break;
+    const t = eligibleTypes(item, settings.types, hasMC);
+    if (t.length) qs.push(makeQuestion(item, pick(t)));
+  }
+  if (!qs.length) return toast('題庫裡沒有符合所選題型的題目，換個題型試試');
+  quiz = { qs, i: 0, results: [], pool };
+  show('quiz');
+  renderQuestion();
+}
+const curQ = () => quiz.qs[quiz.i];
+
+function clozeHTML(sentence, reveal){
+  let first = true;
+  return h(sentence).replace(/\[([^\]]+)\]/g, (_, w) => {
+    if (!first) return w;
+    first = false;
+    return reveal ? `<b style="color:var(--accent)">${w}</b>` : '<span class="blank"></span>';
+  });
+}
+const plainSentence = s => s.replace(/\[([^\]]+)\]/g, '$1');
+
+function speakQuestion(){
+  const q = curQ(), it = q.item;
+  if (q.type === 'zh2en') sayZh(it.zh);
+  else if (q.type === 'listen') sayEn(q.answers[0]);
+  else if (q.type === 'cloze'){
+    let first = true;
+    sayEn(it.sentence.replace(/\[([^\]]+)\]/g, (_, w) => { if (!first) return w; first = false; return ', blank, '; }));
+  }
+  else if (q.type === 'mc') sayEn(it.en);
+}
+
+function renderQuestion(){
+  const q = curQ(), it = q.item, mode = settings.prompt;
+  const showText = mode !== 'voice';
+  quiz.answered = false; quiz.hint = false;
+  $('#qProgress').textContent = `${quiz.i + 1} / ${quiz.qs.length}`;
+  $('#qBar').style.width = (quiz.i / quiz.qs.length * 100) + '%';
+  $('#qType').textContent = TYPES[q.type].label;
+  $('#feedback').innerHTML = '';
+
+  let p = '', instr = '';
+  if (q.type === 'zh2en'){
+    instr = '用英文怎麼說？';
+    p = showText ? `<div class="big">${h(it.zh)}</div>` : `<div class="hidden-prompt">🔊 聽中文，說出／拼出英文</div>`;
+  } else if (q.type === 'listen'){
+    instr = '聽發音，拼出英文';
+    p = `<div class="hidden-prompt">🔊 聽英文，拼出你聽到的${/\s/.test(q.answers[0]) ? '句子' : '單字'}</div>`;
+  } else if (q.type === 'cloze'){
+    instr = '空格裡要填什麼？';
+    p = showText ? `<div class="sentence">${clozeHTML(it.sentence)}</div>` : `<div class="hidden-prompt">🔊 聽句子，填出「blank」的字</div>`;
+    if (it.zh) p += `<div class="hint-zh">中文：${h(it.zh)}</div>`;
+  } else if (q.type === 'mc'){
+    instr = '選出正確的中文意思';
+    p = showText ? `<div class="big">${h(it.en)}</div>` : `<div class="hidden-prompt">🔊 聽英文，選出中文</div>`;
+  }
+  $('#qPrompt').innerHTML = p;
+  $('#qInstr').textContent = instr;
+  $('#replayBtn').hidden = !canTTS;
+
+  if (q.type === 'mc'){
+    $('#answerArea').innerHTML = `<div class="opts">${q.options.map((o, i) => `<button data-i="${i}">${h(o)}</button>`).join('')}</div>`;
+    $('#answerArea').querySelectorAll('.opts button').forEach(b => b.addEventListener('click', () => submit(q.options[+b.dataset.i])));
+  } else {
+    $('#answerArea').innerHTML = `
+      <div class="ansrow">
+        <input type="text" id="ans" class="grow" placeholder="輸入英文" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
+        <button class="primary" id="checkBtn">確認</button>
+      </div>
+      ${SR ? '<button class="block mic soft" id="micBtn">🎤 用說的（唸單字或拼字母）</button>' : ''}
+      <div class="row" style="justify-content:space-between;margin-top:6px">
+        <button class="ghost" id="hintBtn">💡 提示</button>
+        <button class="ghost" id="skipBtn">不會，看答案</button>
+      </div>
+      <div class="hintline" id="hintLine"></div>`;
+    const inp = $('#ans');
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); if (!quiz.answered) submit(inp.value); else next(); } });
+    $('#checkBtn').addEventListener('click', () => submit(inp.value));
+    $('#hintBtn').addEventListener('click', showHint);
+    $('#skipBtn').addEventListener('click', () => submit(''));
+    if (SR) $('#micBtn').addEventListener('click', voiceAnswer);
+    if (mode === 'text' && q.type !== 'listen') setTimeout(() => inp.focus(), 50);
+  }
+  if (mode !== 'text' || q.type === 'listen') speakQuestion();
+}
+
+function showHint(){
+  quiz.hint = true;
+  const a = curQ().answers[0];
+  $('#hintLine').textContent = a.split(/\s+/).map(w => w[0] + w.slice(1).replace(/[A-Za-z]/g, '_')).join('   ') + `  (${a.replace(/[^A-Za-z]/g, '').length} 個字母)`;
+}
+
+function stopListening(){ if (rec && listening){ try { rec.abort(); } catch(e){} } }
+async function voiceAnswer(){
+  if (listening){ try { rec.stop(); } catch(e){} return; }
+  if (quiz.answered) return;
+  if (canTTS) speechSynthesis.cancel();
+  const idx = quiz.i, btn = $('#micBtn');
+  listening = true; btn.classList.add('rec'); btn.textContent = '● 聆聽中…說完會自動送出（點此停止）';
+  try {
+    const alts = await recognize();
+    if (!quiz || quiz.i !== idx || quiz.answered) return;
+    const q = curQ();
+    const cands = voiceCandidates(alts, q.answers);
+    const best = cands.find(c => matches(c, q.answers)) || cands[0] || '';
+    $('#ans').value = best;
+    submit(best, true);
+  } catch(err){
+    if (err !== 'aborted') toast(srErrorMsg(err));
+  } finally {
+    listening = false;
+    if (btn.isConnected){ btn.classList.remove('rec'); btn.textContent = '🎤 用說的（唸單字或拼字母）'; }
+  }
+}
+
+function submit(ans, viaVoice){
+  if (quiz.answered) return;
+  const q = curQ(), it = q.item;
+  ans = String(ans || '').trim();
+  const ok = q.type === 'mc' ? ans === it.zh : matches(ans, q.answers);
+  quiz.answered = true;
+  if (!quiz.results[quiz.i]){
+    quiz.results[quiz.i] = { q, user: ans, ok };
+    if (ok) wrongKeys.delete(it.key); else wrongKeys.add(it.key);
+    store.set('wrongKeys', [...wrongKeys]);
+  }
+  const firstOk = quiz.results[quiz.i].ok;
+
+  if (q.type === 'mc'){
+    $('#answerArea').querySelectorAll('.opts button').forEach(b => {
+      const o = q.options[+b.dataset.i]; b.disabled = true; b.style.opacity = 1;
+      if (o === it.zh) b.classList.add('right'); else if (o === ans) b.classList.add('wrong');
+    });
+  } else {
+    $('#ans').disabled = true; $('#checkBtn').disabled = true;
+    if ($('#micBtn')) $('#micBtn').disabled = true;
+    $('#hintBtn').disabled = true; $('#skipBtn').disabled = true;
+  }
+
+  const answerText = q.type === 'mc' ? it.zh : q.answers.join(' / ');
+  const sim = ans && !ok && q.type !== 'mc' ? Math.max(...q.answers.map(a => similarity(ans, a))) : 0;
+  let html = `<div class="fb ${ok ? 'ok' : 'bad'}">
+    <div class="t">${ok ? (firstOk ? '✅ 答對了！' : '✅ 這次對了！') : (ans ? '❌ 再加油' : '📖 正確答案')}</div>
+    <div class="line">正確答案：<b>${h(answerText)}</b> ${q.type !== 'mc' ? `<button class="say" data-say="${h(q.answers[0])}" aria-label="播放">🔊</button>` : ''}</div>`;
+  if (!ok && ans) html += `<div class="line">你的答案：<s>${h(ans)}</s>${viaVoice ? '（語音）' : ''}${sim >= 0.75 ? ' — 很接近了！' : ''}</div>`;
+  if (q.type !== 'zh2en' || it.clozeOnly) html += `<div class="line muted">${h(it.clozeOnly ? plainSentence(it.sentence) : it.en)}　${h(it.zh)}</div>`;
+  if (it.sentence && !it.clozeOnly) html += `<div class="ex">${clozeHTML(it.sentence, true)} <button class="say" data-say="${h(plainSentence(it.sentence))}" aria-label="播放例句">🔊</button></div>`;
+  else if (it.clozeOnly && q.type === 'cloze') html += `<div class="ex">${clozeHTML(it.sentence, true)} <button class="say" data-say="${h(plainSentence(it.sentence))}" aria-label="播放句子">🔊</button></div>`;
+  html += `<div class="actions">`;
+  if (!ok && q.type !== 'mc') html += `<button id="retryBtn">再試一次</button>${ans ? '<button id="overrideBtn">算我對</button>' : ''}`;
+  html += `<button class="primary" id="nextBtn">${quiz.i + 1 < quiz.qs.length ? '下一題 →' : '看成績'}</button></div></div>`;
+  $('#feedback').innerHTML = html;
+
+  $('#feedback').querySelectorAll('[data-say]').forEach(b => b.addEventListener('click', () => sayEn(b.dataset.say)));
+  $('#nextBtn').addEventListener('click', next);
+  if ($('#retryBtn')) $('#retryBtn').addEventListener('click', retry);
+  if ($('#overrideBtn')) $('#overrideBtn').addEventListener('click', () => {
+    quiz.results[quiz.i].ok = true; wrongKeys.delete(it.key); store.set('wrongKeys', [...wrongKeys]);
+    const fb = $('#feedback .fb'); fb.classList.replace('bad', 'ok'); fb.querySelector('.t').textContent = '✅ 好，算你對！';
+    $('#overrideBtn').remove(); if ($('#retryBtn')) $('#retryBtn').remove();
+  });
+  $('#nextBtn').focus({preventScroll: true});
+  $('#feedback').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  if (settings.prompt !== 'text') sayEn(q.type === 'mc' ? it.en : q.answers[0]);
+}
+
+function retry(){
+  quiz.answered = false;
+  $('#feedback').innerHTML = '';
+  $('#ans').disabled = false; $('#checkBtn').disabled = false;
+  if ($('#micBtn')) $('#micBtn').disabled = false;
+  $('#hintBtn').disabled = false; $('#skipBtn').disabled = false;
+  $('#ans').value = ''; $('#ans').focus();
+}
+
+function next(){
+  if (!quiz) return;
+  stopListening();
+  quiz.i++;
+  if (quiz.i >= quiz.qs.length) return renderResult();
+  renderQuestion();
+  window.scrollTo(0, 0);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && $('#quiz').classList.contains('on') && quiz && quiz.answered && !e.target.matches('textarea')){
+    e.preventDefault(); next();
+  }
+});
+$('#replayBtn').addEventListener('click', speakQuestion);
+$('#quitBtn').addEventListener('click', () => {
+  if (quiz.results.filter(Boolean).length && confirm('要結束並看目前成績嗎？')) return renderResult();
+  if (!quiz.results.filter(Boolean).length){ renderHome(); show('home'); }
+});
+
+/* ---------------- 成績 ---------------- */
+function renderResult(){
+  const rs = quiz.results.filter(Boolean);
+  const okN = rs.filter(r => r.ok).length;
+  $('#scoreN').textContent = rs.length ? Math.round(okN / rs.length * 100) + ' 分' : '—';
+  $('#scoreD').textContent = `答對 ${okN} / ${rs.length} 題`;
+  $('#rlist').innerHTML = rs.map(r => {
+    const it = r.q.item;
+    const target = r.q.type === 'cloze' ? clozeHTML(it.sentence, true) : h(it.en);
+    return `<li><span class="ic">${r.ok ? '✅' : '❌'}</span><div class="grow">
+      <div class="en">${target} <button class="say" data-say="${h(r.q.type === 'cloze' ? plainSentence(it.sentence) : it.en)}">🔊</button></div>
+      <div class="small muted">${h(it.zh)}　·　${TYPES[r.q.type].label}</div>
+      ${!r.ok && r.user ? `<div class="small">你的答案：<s>${h(r.user)}</s></div>` : ''}</div></li>`;
+  }).join('');
+  $('#rlist').querySelectorAll('[data-say]').forEach(b => b.addEventListener('click', () => sayEn(b.dataset.say)));
+  const wrong = rs.filter(r => !r.ok).map(r => r.q.item);
+  $('#retryWrong').hidden = !wrong.length;
+  quiz.wrong = wrong;
+  show('result');
+}
+$('#retryWrong').addEventListener('click', () => startQuiz(quiz.wrong, true));
+$('#againBtn').addEventListener('click', () => startQuiz(quiz.pool, false));
+$('#homeBtn').addEventListener('click', () => { renderHome(); show('home'); });
+
+/* ---------------- 啟動 ---------------- */
+renderHome();
+loadFromHash();
+window.addEventListener('hashchange', loadFromHash);
+</script>
+</body>
+</html>
