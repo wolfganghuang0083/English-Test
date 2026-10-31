@@ -18,11 +18,14 @@ var DEFAULT_TEACHER_PASSWORD = '1234';
 var ss_cache_ = null;
 function ss_() {
   if (ss_cache_) return ss_cache_;
-  if (SPREADSHEET_ID) return (ss_cache_ = SpreadsheetApp.openById(SPREADSHEET_ID));
+  var props = PropertiesService.getScriptProperties();
+  if (SPREADSHEET_ID) {
+    if (props.getProperty('SHEET_ID') !== SPREADSHEET_ID) props.setProperty('SHEET_ID', SPREADSHEET_ID);   // 記住，之後更新程式不怕 ID 被清空
+    return (ss_cache_ = SpreadsheetApp.openById(SPREADSHEET_ID));
+  }
   var active = SpreadsheetApp.getActive();
   if (active) return (ss_cache_ = active);
-  // 獨立的 Apps Script 專案又沒填 ID：自動建立一個試算表
-  var props = PropertiesService.getScriptProperties();
+  // 獨立的 Apps Script 專案又沒填 ID：用記住的試算表，沒有就自動建立一個
   var id = props.getProperty('SHEET_ID');
   if (id) return (ss_cache_ = SpreadsheetApp.openById(id));
   var ss = SpreadsheetApp.create('英文小考後台（成績與帳號）');
