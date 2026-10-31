@@ -65,9 +65,52 @@ function ensureSetup_() {
     try { ss_().setSpreadsheetTimeZone(Session.getScriptTimeZone() || 'Asia/Taipei'); } catch (e) {}
     props.setProperty('TZ_SET', '1');
   }
+  if (!props.getProperty('CLEANUP_V1')) cleanupDuplicates_(props);
   if (ss_().getSheetByName(SHEETS.users.name)) return;
   var lock = LockService.getScriptLock(); lock.waitLock(20000);
   try { if (!ss_().getSheetByName(SHEETS.users.name)) setup(); } finally { lock.releaseLock(); }
+}
+
+/** 一次性清理：刪掉完全相同的重複作答紀錄（同一時間、同帳號、同單字、同答案），並修正「單字狀態」的次數 */
+function cleanupDuplicates_(props) {
+  var lock = LockService.getScriptLock(); lock.waitLock(25000);
+  try {
+    if (props.getProperty('CLEANUP_V1')) return;
+    var ss = ss_();
+    var log = ss.getSheetByName(SHEETS.log.name);
+    var n = log ? log.getLastRow() - 1 : 0;
+    if (n > 0) {
+      var width = SHEETS.log.headers.length;
+      var data = log.getRange(2, 1, n, width).getValues();
+      var seen = {}, keep = [], removed = [];
+      data.forEach(function (r) {
+        var t = r[0] instanceof Date ? r[0].getTime() : String(r[0]);
+        var k = r[9] ? 'id:' + r[9] : [t, r[1], r[4], r[5], r[6], r[7]].join('\u0001');
+        if (seen[k]) removed.push(r); else { seen[k] = 1; keep.push(r); }
+      });
+      if (removed.length) {
+        log.getRange(2, 1, n, width).clearContent();
+        log.getRange(2, 1, keep.length, width).setValues(keep);
+        var st = ss.getSheetByName(SHEETS.stats.name);
+        var m = st ? st.getLastRow() - 1 : 0;
+        if (m > 0) {
+          var stats = st.getRange(2, 1, m, 6).getValues();
+          removed.forEach(function (r) {
+            for (var i = 0; i < stats.length; i++) {
+              if (String(stats[i][0]).toLowerCase() === String(r[1]).toLowerCase() &&
+                  String(stats[i][1]).toLowerCase() === String(r[4]).toLowerCase()) {
+                if (r[6] === '✓') { stats[i][2] = Math.max(0, (+stats[i][2] || 0) - 1); stats[i][4] = Math.max(0, (+stats[i][4] || 0) - 1); }
+                else stats[i][3] = Math.max(0, (+stats[i][3] || 0) - 1);
+                break;
+              }
+            }
+          });
+          st.getRange(2, 1, m, 6).setValues(stats);
+        }
+      }
+    }
+    props.setProperty('CLEANUP_V1', '1');
+  } finally { lock.releaseLock(); }
 }
 
 function doGet() {
