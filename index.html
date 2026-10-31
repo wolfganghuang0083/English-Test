@@ -196,6 +196,8 @@ s{color:var(--bad)}
     <div class="field">
       <div class="lbl"><span>語音速度</span><span id="rateVal" class="muted"></span></div>
       <input type="range" id="rate" min="0.5" max="1.2" step="0.05">
+      <button class="soft block" id="testSound" style="margin-top:10px">🔊 測試聲音</button>
+      <div class="small muted" style="margin-top:6px">聽不到？iPhone 請先<b>關掉靜音模式</b>（手機側邊的靜音鍵；畫面上方出現 🔕 就是靜音中），再把音量調大。</div>
     </div>
 
     <div id="micNote" class="note warn" hidden>這個瀏覽器不支援語音作答（仍可打字作答）。建議用 iPhone 的 Safari 或 Android 的 Chrome 開啟，不要用 LINE 內建瀏覽器。</div>
@@ -590,13 +592,34 @@ function pickVoice(lang){
   return voices.find(v => same(v) && good.test(v.name)) || voices.find(same) ||
          voices.find(v => v.lang.toLowerCase().startsWith(L.slice(0, 2)));
 }
+// iPhone 規定：第一次發聲必須在使用者點擊時發生，所以第一次點畫面就先「解鎖」語音
+let ttsUnlocked = false;
+function unlockTTS(){
+  if (ttsUnlocked || !canTTS) return;
+  ttsUnlocked = true;
+  try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch(e){}
+}
+document.addEventListener('touchend', unlockTTS, {passive: true});
+document.addEventListener('click', unlockTTS);
+
+let ttsWarned = false;
 function speak(text, lang){
-  if (!canTTS || !text) return;
-  speechSynthesis.cancel();
+  if (!canTTS){ if (!ttsWarned){ ttsWarned = true; toast('這個瀏覽器不支援語音朗讀，請改用 Safari 或 Chrome', 4000); } return; }
+  if (!text) return;
+  if (!voices.length) loadVoices();
+  if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
+  try { speechSynthesis.resume(); } catch(e){}
   const u = new SpeechSynthesisUtterance(text);
   u.lang = lang; const v = pickVoice(lang); if (v) u.voice = v;
   u.rate = +settings.rate || 0.9;
+  u.volume = 1;
+  let started = false;
+  u.onstart = () => { started = true; };
   speechSynthesis.speak(u);
+  clearTimeout(speak._w);
+  speak._w = setTimeout(() => {
+    if (!started && !ttsWarned){ ttsWarned = true; toast('聽不到聲音？請關掉手機靜音模式、把音量調大，再按「🔊 再聽一次」', 5000); }
+  }, 2500);
 }
 const sayEn = t => speak(t, 'en-US');
 const sayZh = t => speak(t, 'zh-TW');
@@ -730,6 +753,7 @@ $('#promptSeg').addEventListener('change', e => { settings.prompt = e.target.val
 $('#count').addEventListener('change', e => { settings.count = e.target.value; saveSettings(); });
 $('#rate').addEventListener('input', e => { settings.rate = +e.target.value; $('#rateVal').textContent = settings.rate.toFixed(2) + 'x'; saveSettings(); });
 $('#rate').addEventListener('change', () => sayEn('This is the speaking speed.'));
+$('#testSound').addEventListener('click', () => { unlockTTS(); sayEn('Hello! Can you hear me?'); });
 $('#startBtn').addEventListener('click', () => startQuiz(scopePool()));
 $('#reviewBtn').addEventListener('click', () => startQuiz(bank.items.filter(x => wrongKeys.has(x.key)), true));
 $('#goBank').addEventListener('click', openBank);
