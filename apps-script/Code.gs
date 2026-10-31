@@ -351,9 +351,9 @@ function ocr_(name, mime, data) {
   var blob = Utilities.newBlob(Utilities.base64Decode(data), mime || 'image/jpeg', name || 'upload');
   var file;
   if (Drive.Files.create) {
-    file = Drive.Files.create({ name: 'ocr-' + Date.now(), mimeType: MimeType.GOOGLE_DOCS }, blob, { ocrLanguage: 'zh-TW' });
+    file = Drive.Files.create({ name: 'ocr-' + Date.now(), mimeType: MimeType.GOOGLE_DOCS }, blob);   // 不指定語言：自動辨識中英文（Drive 不接受 zh-TW）
   } else {
-    file = Drive.Files.insert({ title: 'ocr-' + Date.now(), mimeType: MimeType.GOOGLE_DOCS }, blob, { ocr: true, ocrLanguage: 'zh-TW' });
+    file = Drive.Files.insert({ title: 'ocr-' + Date.now(), mimeType: MimeType.GOOGLE_DOCS }, blob, { ocr: true });
   }
   try {
     var text = DocumentApp.openById(file.id).getBody().getText();

@@ -622,7 +622,7 @@ function esc(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 function variants(word){
   const w = word.toLowerCase();
-  const v = new Set([w, w+'s', w+'es', w+'ed', w+'d', w+'ing', w+"'s"]);
+  const v = new Set([w, w+'s', w+'es', w+'ed', w+'d', w+'ing', w+"'s", w+'er', w+'est', w+'ly', w+'r', w+'st']);
   if (/e$/.test(w)) v.add(w.slice(0, -1) + 'ing');
   if (/[^aeiou]y$/.test(w)){ v.add(w.slice(0, -1) + 'ies'); v.add(w.slice(0, -1) + 'ied'); }
   if (/[^aeiou][aeiou][bdgklmnprt]$/.test(w)){ v.add(w + w.slice(-1) + 'ing'); v.add(w + w.slice(-1) + 'ed'); }
@@ -1040,7 +1040,63 @@ function fileToBase64(file){
   });
 }
 // 把 OCR 文字轉成題庫格式：找「單字 (詞性) 中文 例句.」的樣式
+// 照片辨識常常是「一欄一欄」輸出（先全部單字、再全部例句）：
+// 依序找出「單字 → (詞性) → 中文」，例句則用內容配對（哪一句含有這個字）
+function ocrColumnsToBank(text){
+  const lines = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/).map(l => l.replace(/[（]/g, '(').replace(/[）]/g, ')').trim()).filter(Boolean);
+  const POS = /\((?:n|v|vt|vi|a|adj|adv|prep|conj|pron|phr|aux)\.?\)/gi;
+  const HEAD = /^([A-Z][A-Za-z]+(?: [A-Za-z]+)* ?& ?[A-Z][A-Za-z]+(?: [A-Za-z]+)*)\s*([㐀-鿿]{2,8})?/;
+  const STAR = /^[✓✔√★]|^[Vv](?=\s*\d|$)/;
+  const isWord = l => /^[a-z][a-z'’\-]*(?: [a-z][a-z'’\-]*){0,3}$/.test(l) && l.replace(/[^a-z]/g, '').length >= 2;
+  const isZh = l => HAS_CJK.test(l) && !HAS_LATIN.test(l) && l.length <= 14;
+  const entries = [], sentences = [];
+  let group = '', star = false;
+  for (let i = 0; i < lines.length; i++){
+    let l = lines[i];
+    const hm = l.match(HEAD);
+    if (hm && !/[.!?]$/.test(l)){ group = (hm[2] ? hm[2] + ' ' : '') + hm[1]; continue; }
+    if (STAR.test(l)){ star = true; l = l.replace(/^[✓✔√★Vv]\s*/, ''); }
+    l = l.replace(/^\d{1,3}\s+/, '').trim();
+    if (!l || /^\d+$/.test(l)) continue;
+    // 例句：大寫開頭、至少 3 個字、沒有中文（可能被拆成兩行，或兩句黏在同一行）
+    if (/^[A-Z][a-z'’]*\b/.test(l) && l.split(/\s+/).length >= 3 && !HAS_CJK.test(l) && !/^(Example|No\.|Word)\b/.test(l)){
+      let sent = l;
+      while (!/[.!?]$/.test(sent) && lines[i + 1] && /^[a-z]/.test(lines[i + 1]) && !HAS_CJK.test(lines[i + 1]) && !isWord(lines[i + 1])) sent += ' ' + lines[++i];
+      sent.split(/(?<=[.!?])\s+(?=[A-Z])/).forEach(x => sentences.push(x.trim()));
+      continue;
+    }
+    const w = l.replace(POS, '').trim();
+    if (isWord(w)){
+      let zh = HAS_CJK.test(l) ? l.replace(POS, '').replace(w, '').trim() : '';
+      for (let k = i + 1; !zh && k < Math.min(lines.length, i + 4); k++){
+        const n = lines[k].replace(POS, '').trim();
+        if (isZh(n)){ zh = n; i = k; break; }
+        if (n && !/^\(?[a-z.]+\)?$/i.test(n) && !/^[✓✔√Vv]?\s*\d*$/.test(n)) break;
+      }
+      entries.push({en: w, zh: zh.replace(/[;；]\s*/g, '；'), star, group});
+      star = false;
+    }
+  }
+  const used = new Set(), lines2 = [];
+  let lastG = null;
+  entries.forEach(e => {
+    const si = sentences.findIndex((s, k) => !used.has(k) && /\[/.test(markCloze(s, e.en)));
+    const sent = si >= 0 ? sentences[si] : '';
+    if (si >= 0) used.add(si);
+    if (!e.zh && !sent) return;   // 雜訊（沒有中文也找不到例句）
+    if (e.group !== lastG){ lastG = e.group; if (e.group) lines2.push('', '# ' + e.group); }
+    const parts = [e.en, e.zh, sent];
+    while (parts.length > 1 && !parts[parts.length - 1]) parts.pop();
+    lines2.push((e.star ? '✓ ' : '') + parts.join(' | '));
+  });
+  const out = lines2.join('\n').trim();
+  return {count: parseBank(out).items.length, text: out};
+}
 function ocrToBank(text){
+  const a = ocrRowsToBank(text), b = ocrColumnsToBank(text);
+  return b.count > a.count ? b : a;
+}
+function ocrRowsToBank(text){
   const flat = String(text || '').replace(/[□☐▢■]/g, ' ').replace(/[（]/g, '(').replace(/[）]/g, ')').replace(/\s+/g, ' ');
   const heads = [];
   const hre = /([A-Z][A-Za-z]+(?: [A-Za-z]+)* ?& ?[A-Z][A-Za-z]+(?: [A-Za-z]+)*) ?([一-鿿]{2,8})/g;
