@@ -5,7 +5,7 @@
 ## 功能
 
 - **上傳題庫**：可以上傳 .txt / .csv，也可以從 Excel、Google 試算表直接複製貼上
-- **四種題型**（可以複選）：
+- **五種題型**（可以複選）：
   - 中翻英：看或聽中文，拼出英文（單字、片語、整句都行）
   - 聽音拼字：聽英文發音，拼出單字
   - 克漏字：句子挖空填字
@@ -33,10 +33,10 @@ go | 去 | Yesterday she [went] to the park.
 look forward to | 期待 | I'm looking forward to the trip.
 You can definitely do it. | 你絕對可以的。
 
-# 克漏字：答案用 [ ] 括起來 | 中文提示
+// 克漏字：答案用 [ ] 括起來 | 中文提示
 He is good [at] playing basketball. | 他很擅長打籃球。
 
-# 同義答案用 / 分開
+// 同義答案用 / 分開
 movie/film | 電影
 ```
 
