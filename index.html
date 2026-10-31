@@ -28,6 +28,7 @@
   }
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0}
 body{
   background:var(--bg);color:var(--text);
@@ -70,12 +71,12 @@ button:disabled{opacity:.45}
 .seg label:has(input:checked){background:var(--card);color:var(--text);box-shadow:var(--shadow);outline:1px solid var(--line)}
 .field{margin-top:14px}
 .field>.lbl{font-size:14px;font-weight:600;margin-bottom:6px;display:flex;justify-content:space-between}
-select,input[type=text],textarea{
+select,input[type=text],input[type=password],textarea{
   width:100%;font:inherit;color:var(--text);background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px;outline:none
 }
 select{min-height:46px}
 input[type=range]{width:100%;accent-color:var(--accent)}
-select:focus,input[type=text]:focus,textarea:focus{border-color:var(--accent)}
+select:focus,input[type=text]:focus,input[type=password]:focus,textarea:focus{border-color:var(--accent)}
 textarea{min-height:46vh;font-size:14px;line-height:1.6;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"PingFang TC",monospace;resize:vertical}
 .stat{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
 .stat div{background:var(--bg);border-radius:10px;padding:6px 10px;font-size:13px}
@@ -138,6 +139,16 @@ s{color:var(--bad)}
 .inapp{background:var(--bad-bg);border:2px solid var(--bad);border-radius:var(--radius);padding:14px;margin-bottom:14px;font-size:15px}
 .inapp .t{font-size:17px;font-weight:800;color:var(--bad);margin-bottom:6px}
 .inapp ul{margin:6px 0 12px;padding-left:20px}
+.userbox{display:flex;align-items:center;gap:4px;font-size:14px;font-weight:600;color:var(--muted)}
+.lvbar{display:flex;height:12px;border-radius:99px;overflow:hidden;background:var(--line);margin:4px 0 10px}
+.lvbar i{display:block;height:100%}
+.lv-m{background:var(--ok)}.lv-l{background:var(--accent)}.lv-w{background:var(--bad)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:0}
+.wchips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
+.wchips span{font-size:13px;padding:3px 9px;border-radius:99px;background:var(--bad-bg);color:var(--bad);font-weight:600}
+.rlist li.click{cursor:pointer}
+.badge{font-size:11px;padding:1px 7px;border-radius:6px;font-weight:700;white-space:nowrap;align-self:center}
+.b-wrong{background:var(--bad-bg);color:var(--bad)}.b-m{background:var(--ok-bg);color:var(--ok)}.b-l{background:var(--accent-soft);color:var(--accent)}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;max-width:90vw;z-index:9}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
@@ -157,10 +168,59 @@ s{color:var(--bad)}
   </div>
 </div>
 
+<!-- ========== LOGIN ========== -->
+<section id="login" class="screen">
+  <header><h1>📝 英文單字小考</h1></header>
+  <div class="note" style="margin:0 0 14px">📢 請用 <b>Safari</b> 或 <b>Chrome</b> 開啟。在 <b>LINE</b> 裡開會<b>沒有聲音</b>。</div>
+  <div class="card" id="cloudLogin">
+    <h2>登入</h2>
+    <div class="field" style="margin-top:0"><div class="lbl">帳號</div>
+      <input type="text" id="loginId" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+    <div class="field"><div class="lbl">密碼</div>
+      <input type="password" id="loginPass" autocomplete="current-password"></div>
+    <button class="primary block big" id="loginBtn" style="margin-top:16px">登入</button>
+    <p class="small muted" style="margin:10px 0 0">帳號密碼由老師提供。登入後，每一次作答和錯題本都會記錄下來，換手機登入也看得到。</p>
+  </div>
+  <div class="card" id="localLogin">
+    <h2 id="localTitle">輸入名字開始</h2>
+    <input type="text" id="localName" placeholder="你的名字" autocomplete="nickname">
+    <button class="block" id="localBtn" style="margin-top:10px">開始</button>
+    <p class="small muted" id="localNote" style="margin:10px 0 0">目前是單機模式：成績和錯題本只存在這支手機。</p>
+  </div>
+</section>
+
+<!-- ========== TEACHER ========== -->
+<section id="teacher" class="screen">
+  <header><h1>👩‍🏫 老師後台</h1><button class="primary" id="teacherBack">返回</button></header>
+  <div class="card">
+    <div class="row"><select id="clsFilter" class="grow"></select><button class="soft" id="teacherRefresh">重新整理</button></div>
+    <div class="stat" id="tSummary" style="margin-bottom:0"></div>
+  </div>
+  <div class="card"><h2>全班最常錯的字（在錯題本裡的人數）</h2><div class="wchips" id="tTop"></div></div>
+  <div class="card" id="tDetail" hidden>
+    <div class="row" style="justify-content:space-between"><h2 id="tDetailName" style="margin:0"></h2><button class="ghost" id="tDetailClose">✕</button></div>
+    <ul class="plist" id="tDetailList" style="max-height:none"></ul>
+  </div>
+  <div class="card"><h2>學生（點一下看每個字的狀況）</h2><ul class="rlist" id="tList"></ul></div>
+  <p class="small muted">完整的每一題作答紀錄在 Google 試算表的「作答紀錄」工作表。要新增學生，在「帳號」工作表加一列即可。</p>
+</section>
+
 <!-- ========== HOME ========== -->
 <section id="home" class="screen on">
-  <header><h1>📝 英文單字小考</h1></header>
+  <header><h1>📝 英文單字小考</h1><div class="userbox"><span id="userName"></span><button class="ghost" id="logoutBtn">登出</button></div></header>
   <div class="note" id="browserTip" style="margin:0 0 14px">📢 請用 <b>Safari</b> 或 <b>Chrome</b> 瀏覽器開啟本頁。在 <b>LINE</b>、FB、IG 裡直接點開會<b>沒有聲音</b>，也不能用麥克風。iPhone 也要<b>關掉靜音模式</b>。</div>
+
+  <button class="soft block big" id="teacherBtn" hidden style="margin-bottom:14px">👩‍🏫 老師後台：看學生成績</button>
+
+  <div class="card" id="progressCard">
+    <h2>我的學習狀況</h2>
+    <div class="lvbar" id="lvBar"></div>
+    <div class="stat" id="lvStat"></div>
+    <div class="wchips" id="wrongChips"></div>
+    <button class="primary block" id="reviewBtn">📕 錯題本複習</button>
+    <p class="small muted" style="margin:8px 0 0">錯過的字要<b>連續答對 2 次</b>才會離開錯題本（錯 3 次以上要連續答對 3 次）。錯題複習會<b>由易到難</b>：選擇 → 克漏字 → 拼字 → 聽寫／整句。</p>
+    <div class="small muted" id="syncStatus" style="margin-top:6px"></div>
+  </div>
 
   <div class="card">
     <h2>題庫</h2>
@@ -199,6 +259,14 @@ s{color:var(--bad)}
     </div>
 
     <div class="field">
+      <div class="lbl">出題順序</div>
+      <select id="order">
+        <option value="smart">優先考不熟的字（錯題 → 沒考過 → 還不熟）</option>
+        <option value="random">完全隨機</option>
+      </select>
+    </div>
+
+    <div class="field">
       <div class="lbl">題數</div>
       <select id="count">
         <option value="5">5 題</option>
@@ -220,8 +288,6 @@ s{color:var(--bad)}
   </div>
 
   <button class="primary block big" id="startBtn">開始考試 ▶</button>
-  <div style="height:10px"></div>
-  <button class="block" id="reviewBtn" hidden></button>
 
   <div class="card" style="margin-top:14px">
     <details>
@@ -246,12 +312,13 @@ s{color:var(--bad)}
 
   <div class="card">
     <div class="row">
-      <label class="btn soft grow" for="fileInput">📄 上傳檔案</label>
-      <input type="file" id="fileInput" accept=".txt,.csv,.tsv,text/plain,text/csv" hidden>
+      <label class="btn soft grow" for="fileInput">📄 上傳檔案／照片／PDF</label>
+      <input type="file" id="fileInput" accept=".txt,.csv,.tsv,.pdf,text/plain,text/csv,application/pdf,image/*" multiple hidden>
       <button id="loadSample">載入 80 字題庫</button>
       <button class="ghost" id="clearBank">清空</button>
     </div>
-    <p class="small muted" style="margin:10px 0 0">可上傳 .txt / .csv，或從 Excel、Google 試算表直接複製貼上（欄位：英文、中文、例句）。</p>
+    <p class="small muted" style="margin:10px 0 0">可上傳 .txt / .csv、<b>考卷照片或 PDF</b>（老師帳號會自動辨識文字，可一次選多張），或從 Excel、Google 試算表直接複製貼上。</p>
+    <button class="primary block" id="saveCloud" hidden style="margin-top:10px">☁️ 存到雲端（全部學生都會用這份題庫）</button>
   </div>
 
   <textarea id="bankText" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="apple | 蘋果 | I eat an [apple] every day."></textarea>
@@ -287,8 +354,8 @@ movie/film | 電影</pre>
   </div>
 
   <div class="card">
-    <details>
-      <summary>🤖 手上只有考卷照片或 PDF？</summary>
+    <details id="aiBox">
+      <summary>🤖 照片辨識不準？用 AI 整理</summary>
       <p class="small">把考卷照片／檔案丟給 Claude（或其他 AI），連同下面這段指令，再把它回傳的內容貼到上面的框框。</p>
       <pre id="aiPrompt"></pre>
       <button class="soft block" id="copyPrompt">複製指令</button>
@@ -325,6 +392,8 @@ movie/film | 電影</pre>
   <div class="card score">
     <div class="n" id="scoreN"></div>
     <div class="d" id="scoreD"></div>
+    <div class="small muted" id="resultInfo" style="margin-top:8px"></div>
+    <div class="small muted" id="resultInfo2"></div>
   </div>
   <div class="row" style="margin-bottom:14px">
     <button class="primary grow big" id="retryWrong">只練答錯的</button>
@@ -340,6 +409,7 @@ movie/film | 電影</pre>
 </div>
 <div class="toast" id="toast"></div>
 
+<script src="config.js"></script>
 <script>
 'use strict';
 
@@ -472,12 +542,11 @@ const store = {
   get(k, d){ try{ const v = localStorage.getItem('evq_'+k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
   set(k, v){ try{ localStorage.setItem('evq_'+k, JSON.stringify(v)); }catch(e){} }
 };
-const DEFAULTS = {types:['zh2en','listen','cloze'], prompt:'both', count:'10', rate:0.9, excludedGroups:[], starOnly:false};
+const DEFAULTS = {types:['zh2en','listen','cloze'], prompt:'both', count:'10', rate:0.9, excludedGroups:[], starOnly:false, order:'smart'};
 let settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
 let bankText = store.get('bankText', null);
 if (bankText == null || bankText.startsWith('# 英文單字小考｜範例題庫')) bankText = SAMPLE;  // 舊範例換成 80 字題庫
 let bank = parseBank(bankText);
-let wrongKeys = new Set(store.get('wrongKeys', []));
 let quiz = null;
 
 const $ = s => document.querySelector(s);
@@ -697,9 +766,294 @@ function srErrorMsg(err){
   return '語音辨識失敗：' + err;
 }
 
+/* ---------------- 帳號、學習紀錄、雲端同步 ---------------- */
+const CFG = window.APP_CONFIG || {};
+const API = String(CFG.apiUrl || '').trim();
+let session = store.get('session', null);   // {id, pass, name, cls, role, mode:'cloud'|'local'}
+let progress = {};                           // {單字key: {r:答對, w:答錯, s:連續答對, t:時間}}
+const isCloud = () => !!(session && session.mode === 'cloud' && API);
+const isTeacher = () => !!(session && session.role === '老師');
+const canEditBank = () => !isCloud() || isTeacher();
+const userKey = () => session ? session.mode + ':' + session.id : 'guest';
+function loadProgress(){ progress = store.get('progress_' + userKey(), {}) || {}; }
+function saveProgress(){ store.set('progress_' + userKey(), progress); }
+function pending(){ return store.get('pending_' + userKey(), []) || []; }
+function setPending(a){ store.set('pending_' + userKey(), a); }
+const required = w => w >= 3 ? 3 : 2;   // 錯越多次，要連續答對越多次
+const inWrongBook = p => !!p && p.w > 0 && p.s < required(p.w);
+function levelOf(item){
+  const p = progress[item.key];
+  if (!p) return 'new';
+  if (inWrongBook(p)) return 'wrong';
+  return p.s >= 3 ? 'mastered' : 'learning';
+}
+function applyResult(key, ok){
+  const p = progress[key] || {r: 0, w: 0, s: 0, t: 0};
+  if (ok){ p.r++; p.s++; } else { p.w++; p.s = 0; }
+  p.t = Date.now();
+  progress[key] = p;
+  saveProgress();
+}
+
+async function api(action, data, timeoutMs){
+  if (!API) throw new Error('還沒設定雲端後台');
+  const ctl = new AbortController();
+  const tm = setTimeout(() => ctl.abort(), timeoutMs || 30000);
+  try {
+    const body = JSON.stringify(Object.assign({action, user: session && session.id, pass: session && session.pass}, data || {}));
+    const res = await fetch(API, {method: 'POST', body, headers: {'Content-Type': 'text/plain;charset=utf-8'}, signal: ctl.signal});
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error || '伺服器錯誤');
+    return j;
+  } catch(e){
+    if (e.name === 'AbortError') throw new Error('連線逾時，請檢查網路');
+    if (e instanceof TypeError) throw new Error('連不上雲端，請檢查網路');
+    throw e;
+  } finally { clearTimeout(tm); }
+}
+
+function setSyncStatus(msg){ $('#syncStatus').textContent = msg; const r = $('#resultInfo2'); if (r) r.textContent = msg; }
+let syncing = null;
+function syncPending(){
+  if (!isCloud()) return Promise.resolve(true);
+  if (syncing) return syncing;
+  const list = pending();
+  if (!list.length) return Promise.resolve(true);
+  setSyncStatus('☁️ 同步中…');
+  syncing = api('saveResults', {results: list})
+    .then(() => { setPending(pending().slice(list.length)); setSyncStatus('☁️ 已同步到雲端 ✓'); return true; })
+    .catch(e => { setSyncStatus('⚠️ 還沒同步（' + e.message + '），下次開啟會自動補傳'); return false; })
+    .finally(() => { syncing = null; });
+  return syncing;
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') syncPending(); });
+
+async function refreshFromCloud(){
+  if (!isCloud()) return;
+  try {
+    const synced = await syncPending();
+    const [b, p] = await Promise.all([api('getBank'), api('getProgress')]);
+    if (b.text && b.text.trim() && b.text !== bankText){ bankText = b.text; store.set('bankText', bankText); bank = parseBank(bankText); }
+    if (synced && !pending().length){ progress = p.progress || {}; saveProgress(); }
+    renderHome();
+  } catch(e){
+    if (/帳號或密碼/.test(e.message)){ toast('帳號或密碼已變更，請重新登入', 4000); session = null; store.set('session', null); return showLogin(); }
+    toast('暫時連不上雲端，先用手機裡的資料（' + e.message + '）', 4000);
+  }
+}
+
+function showLogin(){
+  $('#cloudLogin').hidden = !API;
+  $('#localTitle').textContent = API ? '不登入，先試用' : '輸入名字開始';
+  $('#localNote').textContent = API ? '試用模式的成績只存在這支手機，老師看不到。' : '目前是單機模式：成績和錯題本只存在這支手機。';
+  show('login');
+}
+async function doLogin(){
+  const id = $('#loginId').value.trim().toLowerCase(), pass = $('#loginPass').value.trim();
+  if (!id || !pass) return toast('請輸入帳號和密碼');
+  const btn = $('#loginBtn'); btn.disabled = true; btn.textContent = '登入中…';
+  try {
+    const j = await api('login', {user: id, pass});
+    session = {id, pass, name: j.user.name, cls: j.user.cls, role: j.user.role, mode: 'cloud'};
+    store.set('session', session);
+    $('#loginPass').value = '';
+    afterLogin();
+  } catch(e){ toast(e.message, 3500); }
+  finally { btn.disabled = false; btn.textContent = '登入'; }
+}
+function localLogin(){
+  const name = $('#localName').value.trim();
+  if (!name) return toast('請輸入名字');
+  session = {id: name.toLowerCase(), name, cls: '', role: '學生', mode: 'local'};
+  store.set('session', session);
+  afterLogin();
+}
+function afterLogin(){
+  loadProgress();
+  renderHome();
+  show('home');
+  refreshFromCloud();
+}
+function logout(){
+  if (!confirm('要登出嗎？')) return;
+  syncPending();
+  session = null; store.set('session', null); progress = {};
+  showLogin();
+}
+$('#loginBtn').addEventListener('click', doLogin);
+$('#loginPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+$('#localBtn').addEventListener('click', localLogin);
+$('#localName').addEventListener('keydown', e => { if (e.key === 'Enter') localLogin(); });
+$('#logoutBtn').addEventListener('click', logout);
+
+function renderUser(){
+  $('#userName').textContent = session ? (session.mode === 'cloud' ? '👤 ' : '📱 ') + session.name + (isTeacher() ? '（老師）' : '') : '';
+  $('#teacherBtn').hidden = !(isCloud() && isTeacher());
+  $('#goBank').hidden = !canEditBank();
+  $('#shareBank').hidden = !canEditBank();
+}
+function renderProgress(){
+  const it = bank.items;
+  const c = {mastered: 0, learning: 0, wrong: 0, new: 0};
+  it.forEach(x => c[levelOf(x)]++);
+  const pct = n => it.length ? (n / it.length * 100) + '%' : '0';
+  $('#lvBar').innerHTML = `<i class="lv-m" style="width:${pct(c.mastered)}"></i><i class="lv-l" style="width:${pct(c.learning)}"></i><i class="lv-w" style="width:${pct(c.wrong)}"></i>`;
+  $('#lvStat').innerHTML = `<div><span class="dot lv-m"></span>熟練 <b>${c.mastered}</b></div><div><span class="dot lv-l"></span>練習中 <b>${c.learning}</b></div>` +
+    `<div><span class="dot lv-w"></span>錯題 <b>${c.wrong}</b></div><div><span class="dot" style="background:var(--line)"></span>還沒考 <b>${c.new}</b></div>`;
+  const wrong = it.filter(x => levelOf(x) === 'wrong').sort((a, b) => progress[b.key].w - progress[a.key].w);
+  $('#wrongChips').innerHTML = wrong.slice(0, 30).map(x => `<span>${h(x.clozeOnly ? x.cloze : x.en)}${progress[x.key].w > 1 ? ' ×' + progress[x.key].w : ''}</span>`).join('') + (wrong.length > 30 ? `<span>…還有 ${wrong.length - 30} 個</span>` : '');
+  $('#reviewBtn').textContent = wrong.length ? `📕 錯題本複習（${wrong.length} 個字）` : '📕 錯題本是空的';
+  $('#reviewBtn').disabled = !wrong.length;
+  if (!isCloud()) $('#syncStatus').textContent = session && session.mode === 'local' ? '📱 紀錄存在這支手機' : '';
+}
+
+/* ---------------- 老師後台 ---------------- */
+let tData = null;
+const fmtTime = t => t ? new Date(t).toLocaleString('zh-TW', {month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false}) : '—';
+async function loadTeacher(){
+  $('#tList').innerHTML = '<li class="muted">載入中…</li>';
+  $('#tDetail').hidden = true;
+  try { tData = await api('overview'); renderTeacher(); }
+  catch(e){ $('#tList').innerHTML = `<li class="muted">讀取失敗：${h(e.message)}</li>`; }
+}
+function renderTeacher(){
+  if (!tData) return;
+  const classes = [...new Set(tData.students.map(s => s.cls).filter(Boolean))].sort();
+  const sel = $('#clsFilter'), cur = sel.value;
+  sel.innerHTML = '<option value="">全部班級</option>' + classes.map(c => `<option ${c === cur ? 'selected' : ''}>${h(c)}</option>`).join('');
+  const list = tData.students.filter(s => !sel.value || s.cls === sel.value)
+    .sort((a, b) => (a.cls || '').localeCompare(b.cls || '') || a.id.localeCompare(b.id));
+  const R = list.reduce((a, s) => a + s.r, 0), W = list.reduce((a, s) => a + s.w, 0);
+  const active = list.filter(s => s.r + s.w > 0).length;
+  $('#tSummary').innerHTML = `<div>學生 <b>${list.length}</b></div><div>有作答 <b>${active}</b></div><div>總作答 <b>${R + W}</b></div><div>正確率 <b>${R + W ? Math.round(R / (R + W) * 100) : 0}%</b></div>`;
+  $('#tTop').innerHTML = tData.topWrong.length ? tData.topWrong.map(x => `<span>${h(x.key)}（${x.n ? x.n + ' 人' : '累計錯 ' + x.w + ' 次'}）</span>`).join('') : '<span class="muted" style="background:none">還沒有資料</span>';
+  $('#tList').innerHTML = list.map(s => {
+    const n = s.r + s.w, acc = n ? Math.round(s.r / n * 100) : 0;
+    return `<li class="click" data-id="${h(s.id)}"><span class="ic">${n ? (s.wrongBook ? '📕' : '🌟') : '💤'}</span><div class="grow">
+      <div class="en">${h(s.name)} <span class="small muted">${h(s.cls)}　${h(s.id)}</span></div>
+      <div class="small muted">作答 ${n} 題 · 正確率 ${acc}% · 錯題 <b style="color:var(--bad)">${s.wrongBook}</b> · 熟練 ${s.mastered} · 最後 ${fmtTime(s.last)}</div></div></li>`;
+  }).join('') || '<li class="muted">還沒有學生帳號，請在試算表的「帳號」工作表新增</li>';
+  $('#tList').querySelectorAll('li[data-id]').forEach(li => li.addEventListener('click', () => showStudent(li.dataset.id)));
+}
+async function showStudent(id){
+  const s = tData.students.find(x => x.id === id);
+  $('#tDetail').hidden = false;
+  $('#tDetailName').textContent = (s ? s.name : id) + ' 的單字狀況';
+  $('#tDetailList').innerHTML = '<li class="muted">載入中…</li>';
+  $('#tDetail').scrollIntoView({behavior: 'smooth', block: 'start'});
+  try {
+    const j = await api('studentDetail', {id});
+    const zhOf = {}; bank.items.forEach(x => zhOf[x.key] = x.zh);
+    const rows = j.words.map(p => Object.assign(p, {wb: inWrongBook(p)}))
+      .sort((a, b) => (b.wb - a.wb) || (b.w - a.w) || (a.s - b.s));
+    $('#tDetailList').innerHTML = rows.map(p => {
+      const badge = p.wb ? '<span class="badge b-wrong">錯題</span>' : p.s >= 3 ? '<span class="badge b-m">熟練</span>' : '<span class="badge b-l">練習中</span>';
+      return `<li><span><b>${h(p.key)}</b> <span class="muted">${h(zhOf[p.key] || '')}</span><br><span class="small muted">對 ${p.r} · 錯 ${p.w} · 連對 ${p.s} · ${fmtTime(p.t)}</span></span>${badge}</li>`;
+    }).join('') || '<li class="muted">這位學生還沒有作答紀錄</li>';
+  } catch(e){ $('#tDetailList').innerHTML = `<li class="muted">讀取失敗：${h(e.message)}</li>`; }
+}
+$('#teacherBtn').addEventListener('click', () => show('teacher'));
+$('#teacherBack').addEventListener('click', () => { renderHome(); show('home'); });
+$('#teacherRefresh').addEventListener('click', loadTeacher);
+$('#clsFilter').addEventListener('change', renderTeacher);
+$('#tDetailClose').addEventListener('click', () => { $('#tDetail').hidden = true; });
+
+/* ---------------- 照片／PDF 辨識（老師帳號） ---------------- */
+function imageToJpeg(file, max){
+  max = max || 2400;
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const sc = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * sc); c.height = Math.round(img.naturalHeight * sc);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve({mime: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.88).split(',')[1]});
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('無法讀取這張圖片')); };
+    img.src = url;
+  });
+}
+function fileToBase64(file){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1]);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+// 把 OCR 文字轉成題庫格式：找「單字 (詞性) 中文 例句.」的樣式
+function ocrToBank(text){
+  const flat = String(text || '').replace(/[□☐▢■]/g, ' ').replace(/[（]/g, '(').replace(/[）]/g, ')').replace(/\s+/g, ' ');
+  const heads = [];
+  const hre = /([A-Z][A-Za-z]+(?: [A-Za-z]+)* ?& ?[A-Z][A-Za-z]+(?: [A-Za-z]+)*) ?([一-鿿]{2,8})/g;
+  let m;
+  while ((m = hre.exec(flat))) heads.push({i: m.index, name: m[2] + ' ' + m[1]});
+  const re = /([A-Za-z][A-Za-z'’\-]*(?: [a-z][A-Za-z'’\-]*){0,3}) ?((?:\( ?(?:n|v|a|adj|adv|prep|conj|pron|phr|vt|vi)\.? ?\) ?)+)([一-鿿][一-鿿；;、，,／/ ]*?) ?([A-Z][^一-鿿]*?[.!?])(?= |$)/g;
+  const lines = [];
+  let lastG = '';
+  while ((m = re.exec(flat))){
+    const g = heads.filter(x => x.i < m.index).pop();
+    if (g && g.name !== lastG){ lastG = g.name; lines.push('', '# ' + g.name); }
+    lines.push([m[1].trim(), m[3].replace(/\s+/g, '').trim(), m[4].trim()].join(' | '));
+  }
+  return {count: lines.filter(l => l && !l.startsWith('#')).length, text: lines.join('\n').trim()};
+}
+async function ocrFiles(files){
+  if (!(isCloud() && isTeacher())){
+    toast(API ? '照片／PDF 辨識要用老師帳號登入才能使用' : '照片／PDF 辨識需要先設定雲端後台（見 SETUP.md）。也可以用下方「🤖 用 AI 整理」', 5000);
+    $('#aiBox').open = true;
+    return;
+  }
+  const out = [];
+  let total = 0;
+  for (let i = 0; i < files.length; i++){
+    const f = files[i];
+    toast(`辨識中（${i + 1}/${files.length}）：${f.name}，約需 10～30 秒…`, 60000);
+    try {
+      const isPdf = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name);
+      if (isPdf && f.size > 15e6) throw new Error('PDF 太大（超過 15MB）');
+      const payload = isPdf ? {mime: 'application/pdf', data: await fileToBase64(f)} : await imageToJpeg(f);
+      const j = await api('ocr', {name: f.name, mime: payload.mime, data: payload.data}, 120000);
+      const conv = ocrToBank(j.text);
+      if (conv.count >= 3){ out.push('// 來自：' + f.name + '（自動辨識，請檢查）\n' + conv.text); total += conv.count; }
+      else out.push('// ⚠️「' + f.name + '」辨識出來的文字無法自動整理，請改成「英文 | 中文 | 例句」格式後刪掉 // ：\n' +
+                    String(j.text || '').split(/\r?\n/).filter(l => l.trim()).map(l => '// ' + l).join('\n'));
+    } catch(e){ out.push('// ⚠️「' + f.name + '」辨識失敗：' + e.message); }
+  }
+  const add = out.join('\n\n');
+  const cur = $('#bankText').value.trim();
+  $('#bankText').value = cur && !confirm(`辨識完成，整理出 ${total} 個字。\n要「取代」目前的題庫嗎？\n（按取消＝加到最後面）`) ? cur + '\n\n' + add : add;
+  renderParse(); commitBank();
+  toast(total ? `整理出 ${total} 個字，請檢查是否正確，再按「☁️ 存到雲端」` : '沒辦法自動整理，請參考下方「🤖 用 AI 整理」', 5000);
+  if (!total) $('#aiBox').open = true;
+}
+
+async function saveBankCloud(){
+  commitBank();
+  if (!bank.items.length) return toast('題庫是空的');
+  if (!confirm(`要把這 ${bank.items.length} 題存到雲端嗎？\n全部學生登入後都會使用這份題庫。`)) return;
+  const items = bank.items.map(x => ({group: x.group, star: x.star, en: x.clozeOnly ? x.sentence : x.en, zh: x.zh,
+    sentence: x.clozeOnly ? '' : x.sentence, sentZh: x.clozeOnly ? '' : x.sentZh}));
+  const btn = $('#saveCloud'); btn.disabled = true;
+  try { const j = await api('saveBank', {items}, 60000); toast(`已存到雲端：${j.saved} 題 ✓`); }
+  catch(e){ toast('存檔失敗：' + e.message, 4000); }
+  finally { btn.disabled = false; }
+}
+$('#saveCloud').addEventListener('click', saveBankCloud);
+
+function startApp(){
+  if (session && session.mode === 'cloud' && !API) session = null;   // 雲端設定被移除
+  if (!session) return showLogin();
+  afterLogin();
+  loadFromHash();
+}
+
 /* ---------------- 畫面切換 ---------------- */
 function show(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
+  if (id === 'teacher') loadTeacher();
   window.scrollTo(0, 0);
   if (id !== 'quiz'){ if (canTTS) speechSynthesis.cancel(); stopListening(); }
 }
@@ -722,10 +1076,10 @@ function renderHome(){
   $('#rateVal').textContent = (+settings.rate).toFixed(2) + 'x';
   $('#micNote').hidden = !!SR;
 
+  $('#order').value = settings.order;
   renderScope();
-  const wrongItems = it.filter(x => wrongKeys.has(x.key));
-  $('#reviewBtn').hidden = !wrongItems.length;
-  $('#reviewBtn').textContent = `📕 複習錯題本（${wrongItems.length}）`;
+  renderUser();
+  renderProgress();
 }
 function saveSettings(){ store.set('settings', settings); }
 
@@ -771,13 +1125,15 @@ $('#rate').addEventListener('input', e => { settings.rate = +e.target.value; $('
 $('#rate').addEventListener('change', () => sayEn('This is the speaking speed.'));
 $('#testSound').addEventListener('click', () => { unlockTTS(); sayEn('Hello! Can you hear me?'); });
 $('#startBtn').addEventListener('click', () => startQuiz(scopePool()));
-$('#reviewBtn').addEventListener('click', () => startQuiz(bank.items.filter(x => wrongKeys.has(x.key)), true));
+$('#reviewBtn').addEventListener('click', () => startQuiz(bank.items.filter(x => levelOf(x) === 'wrong'), 'review'));
+$('#order').addEventListener('change', e => { settings.order = e.target.value; saveSettings(); });
 $('#goBank').addEventListener('click', openBank);
 $('#shareBank').addEventListener('click', shareBank);
 
 /* ---------------- 題庫編輯 ---------------- */
 let parseTimer = null;
 function openBank(){
+  $('#saveCloud').hidden = !(isCloud() && isTeacher());
   $('#bankText').value = bankText;
   renderParse();
   show('bank');
@@ -836,10 +1192,13 @@ async function readFileText(file){
   return text.replace(/^﻿/, '');
 }
 $('#fileInput').addEventListener('change', async e => {
-  const file = e.target.files[0]; e.target.value = '';
-  if (!file) return;
-  if (/\.(xlsx?|docx?|pdf|jpe?g|png|heic)$/i.test(file.name)){
-    toast('這個檔案格式無法直接讀取：Excel 請另存成 CSV，或直接複製貼上；照片／PDF 請用下方「AI 轉換」', 4500);
+  const files = [...e.target.files]; e.target.value = '';
+  if (!files.length) return;
+  const visual = files.filter(f => /^image\//.test(f.type) || /\.(pdf|jpe?g|png|heic|heif|webp)$/i.test(f.name));
+  if (visual.length) return ocrFiles(visual);
+  const file = files[0];
+  if (/\.(xlsx?|docx?)$/i.test(file.name)){
+    toast('Excel／Word 檔無法直接讀取：Excel 請另存成 CSV，或直接複製貼上', 4500);
     return;
   }
   let text = await readFileText(file);
@@ -901,6 +1260,7 @@ async function shareBank(){
 async function loadFromHash(){
   const m = location.hash.match(/^#bank=([A-Za-z0-9_-]+)/);
   if (!m) return;
+  if (!canEditBank()){ history.replaceState(null, '', location.pathname + location.search); return toast('題庫由老師統一管理，不能載入別的題庫'); }
   try {
     const text = await decodeBank(m[1]);
     const n = parseBank(text).items.length;
@@ -931,19 +1291,34 @@ function makeQuestion(item, type){
   }
   return q;
 }
-function startQuiz(pool, isReview){
-  if (!settings.types.length) return toast('請至少勾選一種題型');
-  if (!pool.length) return toast(bank.items.length ? '目前範圍沒有題目，請調整單元或打勾設定' : '題庫是空的，請先上傳單字');
+// 錯題複習：依照連續答對次數，題目由易到難
+function ladderType(item, hasMC){
+  const p = progress[item.key], s = p ? p.s : 0;
+  const steps = s <= 0 ? ['mc', 'cloze'] : s === 1 ? ['cloze', 'zh2en'] : ['zh2en', 'listen', 'sent'];
+  const el = eligibleTypes(item, Object.keys(TYPES), hasMC);
+  const both = steps.filter(t => el.includes(t));
+  return both.length ? pick(both) : (el.length ? pick(el) : null);
+}
+function startQuiz(pool, mode){
+  mode = mode || 'normal';
+  if (mode !== 'review' && !settings.types.length) return toast('請至少勾選一種題型');
+  if (!pool.length) return toast(mode === 'review' ? '錯題本是空的，太棒了！' : bank.items.length ? '目前範圍沒有題目，請調整單元或打勾設定' : '題庫是空的，請先上傳單字');
   const hasMC = new Set(bank.items.filter(x => x.zh && !x.clozeOnly).map(x => x.zh)).size >= 2;
-  const n = settings.count === 'all' || isReview ? Infinity : +settings.count;
+  const n = settings.count === 'all' || mode !== 'normal' ? Infinity : +settings.count;
+  let list = shuffle(pool.slice());
+  if (mode === 'normal' && settings.order === 'smart'){
+    const rank = {wrong: 0, new: 1, learning: 2, mastered: 3};
+    list.sort((a, b) => rank[levelOf(a)] - rank[levelOf(b)]);
+  }
   const qs = [];
-  for (const item of shuffle(pool.slice())){
+  for (const item of list){
     if (qs.length >= n) break;
+    if (mode === 'review'){ const t = ladderType(item, hasMC); if (t) qs.push(makeQuestion(item, t)); continue; }
     const t = eligibleTypes(item, settings.types, hasMC);
     if (t.length) qs.push(makeQuestion(item, pick(t)));
   }
   if (!qs.length) return toast('題庫裡沒有符合所選題型的題目，換個題型試試');
-  quiz = { qs, i: 0, results: [], pool };
+  quiz = { qs, i: 0, results: [], pool, mode };
   show('quiz');
   renderQuestion();
 }
@@ -1066,9 +1441,12 @@ function submit(ans, viaVoice){
     : matches(ans, q.answers) || (q.type === 'sent' && Math.max(...q.answers.map(a => similarity(ans, a))) >= 0.9);
   quiz.answered = true;
   if (!quiz.results[quiz.i]){
-    quiz.results[quiz.i] = { q, user: ans, ok };
-    if (ok) wrongKeys.delete(it.key); else wrongKeys.add(it.key);
-    store.set('wrongKeys', [...wrongKeys]);
+    const prev = progress[it.key] ? Object.assign({}, progress[it.key]) : null;
+    const rec = { t: Date.now(), key: it.key, en: it.clozeOnly ? plainSentence(it.sentence) : it.en, type: TYPES[q.type].label,
+                  ok, ans, correct: q.type === 'mc' ? it.zh : q.answers.join(' / ') };
+    quiz.results[quiz.i] = { q, user: ans, ok, prev, rec };
+    applyResult(it.key, ok);
+    if (isCloud()) setPending(pending().concat([rec]));
   }
   const firstOk = quiz.results[quiz.i].ok;
 
@@ -1102,7 +1480,11 @@ function submit(ans, viaVoice){
   $('#nextBtn').addEventListener('click', next);
   if ($('#retryBtn')) $('#retryBtn').addEventListener('click', retry);
   if ($('#overrideBtn')) $('#overrideBtn').addEventListener('click', () => {
-    quiz.results[quiz.i].ok = true; wrongKeys.delete(it.key); store.set('wrongKeys', [...wrongKeys]);
+    const r = quiz.results[quiz.i];
+    r.ok = true; r.rec.ok = true;
+    if (r.prev) progress[it.key] = Object.assign({}, r.prev); else delete progress[it.key];
+    applyResult(it.key, true);
+    if (isCloud()){ const pl = pending(); const k = pl.findIndex(x => x.t === r.rec.t && x.key === r.rec.key); if (k >= 0){ pl[k].ok = true; setPending(pl); } }
     const fb = $('#feedback .fb'); fb.classList.replace('bad', 'ok'); fb.querySelector('.t').textContent = '✅ 好，算你對！';
     $('#overrideBtn').remove(); if ($('#retryBtn')) $('#retryBtn').remove();
   });
@@ -1158,10 +1540,15 @@ function renderResult(){
   const wrong = rs.filter(r => !r.ok).map(r => r.q.item);
   $('#retryWrong').hidden = !wrong.length;
   quiz.wrong = wrong;
+  const left = rs.filter(r => r.prev && inWrongBook(r.prev) && !inWrongBook(progress[r.q.item.key])).length;
+  const wb = bank.items.filter(x => levelOf(x) === 'wrong').length;
+  $('#resultInfo').textContent = `錯題本目前 ${wb} 個字` + (left ? `，這次有 ${left} 個字畢業了 🎓` : '');
+  $('#resultInfo2').textContent = '';
   show('result');
+  syncPending();
 }
-$('#retryWrong').addEventListener('click', () => startQuiz(quiz.wrong, true));
-$('#againBtn').addEventListener('click', () => startQuiz(quiz.pool, false));
+$('#retryWrong').addEventListener('click', () => startQuiz(quiz.wrong, 'retry'));
+$('#againBtn').addEventListener('click', () => startQuiz(quiz.pool, quiz.mode === 'review' ? 'review' : 'normal'));
 $('#homeBtn').addEventListener('click', () => { renderHome(); show('home'); });
 
 /* ---------------- 啟動 ---------------- */
@@ -1191,8 +1578,7 @@ $('#copyUrl').addEventListener('click', async () => {
   catch(e){ prompt('複製這個網址，貼到 Safari 或 Chrome：', url); }
 });
 
-renderHome();
-loadFromHash();
+startApp();
 window.addEventListener('hashchange', loadFromHash);
 </script>
 </body>
