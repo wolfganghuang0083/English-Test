@@ -35,7 +35,7 @@ function ss_() {
 
 var SHEETS = {
   users: { name: '帳號',     headers: ['帳號', '密碼', '姓名', '班級', '身分'] },
-  bank:  { name: '題庫',     headers: ['單元', '打勾', '英文', '中文', '例句', '例句中文'] },
+  bank:  { name: '題庫',     headers: ['單元', '打勾', '英文', '中文', '例句', '例句中文', '所屬單字'] },
   log:   { name: '作答紀錄', headers: ['時間', '帳號', '姓名', '班級', '單字', '題型', '對錯', '學生答案', '正確答案', '紀錄ID', '測驗ID'] },
   stats: { name: '單字狀態', headers: ['帳號', '單字', '答對次數', '答錯次數', '連續答對', '最後作答'] }
 };
@@ -145,6 +145,14 @@ function doPost(e) {
       }
       case 'saveBank':      return json_(saveBank_(req.items));
       case 'ocr':           return json_(ocr_(req.name, req.mime, req.data));
+      case 'getAiKey':      return json_({ ok: true, key: PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY') || '' });
+      case 'setAiKey': {
+        var key = String(req.key || '').trim();
+        if (key && !/^sk-ant-[\w-]{20,}$/.test(key)) return json_({ ok: false, error: '金鑰格式不對，應該是 sk-ant- 開頭' });
+        if (key) PropertiesService.getScriptProperties().setProperty('ANTHROPIC_API_KEY', key);
+        else PropertiesService.getScriptProperties().deleteProperty('ANTHROPIC_API_KEY');
+        return json_({ ok: true });
+      }
     }
     return json_({ ok: false, error: '未知的動作：' + action });
   } catch (err) {
@@ -215,7 +223,8 @@ function getBank_() {
     var star = /^(✓|✔|v|y|yes|true|1|是|★|\*)$/i.test(String(r[1]).trim()) ? '✓ ' : '';
     var parts = [en, r[3], r[4], r[5]].map(function (x) { return String(x || '').replace(/\|/g, '／').trim(); });
     while (parts.length > 1 && !parts[parts.length - 1]) parts.pop();
-    lines.push(star + parts.join(' | '));
+    var sub = String(r[6] || '').trim() ? '- ' : '';   // 片語、例句等延伸題，掛在某個單字底下
+    lines.push(sub + star + parts.join(' | '));
   });
   return { ok: true, text: lines.join('\n').trim() };
 }
@@ -225,11 +234,12 @@ function saveBank_(items) {
   var lock = LockService.getScriptLock(); lock.waitLock(20000);
   try {
     var sh = sheet_(SHEETS.bank);
-    if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 6).clearContent();
+    if (sh.getRange(1, 7).getValue() !== '所屬單字') sh.getRange(1, 7).setValue('所屬單字').setFontWeight('bold').setBackground('#e8efff');
+    if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 7).clearContent();
     var rows = items.slice(0, 3000).map(function (x) {
-      return [safe_(x.group), x.star ? '✓' : '', safe_(x.en), safe_(x.zh), safe_(x.sentence), safe_(x.sentZh)];
+      return [safe_(x.group), x.star ? '✓' : '', safe_(x.en), safe_(x.zh), safe_(x.sentence), safe_(x.sentZh), safe_(x.head)];
     });
-    if (rows.length) sh.getRange(2, 1, rows.length, 6).setValues(rows);
+    if (rows.length) sh.getRange(2, 1, rows.length, 7).setValues(rows);
     return { ok: true, saved: rows.length };
   } finally { lock.releaseLock(); }
 }

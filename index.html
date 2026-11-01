@@ -268,6 +268,10 @@ s{color:var(--bad)}
       <div class="chips" id="unitChips"></div>
     </div>
     <div class="note" id="scopeCount"></div>
+    <div class="field" id="familyBox" hidden>
+      <div class="lbl">📌 依單字練習 <span class="small muted" style="font-weight:400">（單字＋片語＋例句＋翻譯一次考完）</span></div>
+      <div class="row"><select id="familySel" class="grow"></select><button class="primary" id="familyGo">▶ 開始</button></div>
+    </div>
   </div>
 
   <div class="card">
@@ -346,6 +350,15 @@ s{color:var(--bad)}
     </div>
     <p class="small muted" style="margin:10px 0 0">可一次選多個檔案：<b>Word（.docx）</b>、<b>PDF</b>、<b>考卷照片</b>、.txt／.csv。上傳後會問你這批題目要放在<b>哪個單元（例如 Unit 1）</b>。PDF、照片和舊版 .doc 要用老師帳號登入才能辨識。也可以直接在下面的框框貼上 Excel／Google 試算表的表格。</p>
     <button class="primary block" id="saveCloud" hidden style="margin-top:10px">☁️ 存到雲端（全部學生都會用這份題庫）</button>
+  </div>
+
+  <div class="card" id="aiCard">
+    <h2>🤖 AI 辨識講義（手寫答案也看得懂）</h2>
+    <label class="btn primary block" id="aiUpload" for="aiInput" style="min-height:52px">📷 拍照／選講義給 AI 辨識</label>
+    <input type="file" id="aiInput" accept="image/*,.pdf,application/pdf" multiple hidden>
+    <p class="small muted" style="margin:10px 0 0">AI 會把講義上的<b>單字、片語、例句填空、翻譯題</b>整理成題目（手寫的部分當作答案），同一個單字的題目會放在一起，學生可以「依單字練習」。可一次選多張。每頁約 NT$2～3，從你的 Claude 帳戶扣款。</p>
+    <button class="ghost" id="aiKeyBtn" style="margin-top:4px">🔑 設定／更換 AI 金鑰</button>
+    <p class="small muted" id="aiNeedTeacher" style="margin:8px 0 0">要用老師帳號登入才能使用 AI 辨識。</p>
   </div>
 
   <textarea id="bankText" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="apple | 蘋果 | I eat an [apple] every day."></textarea>
@@ -465,7 +478,7 @@ movie/film | 電影</pre>
 <div class="toast" id="toast"></div>
 <div id="updateBar" hidden style="position:fixed;top:0;left:0;right:0;z-index:9;background:var(--accent);color:var(--accent-ink);text-align:center;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:700;cursor:pointer">🔄 有新版本，點這裡更新</div>
 
-<script>window.APP_VERSION = '2026-10-31.9';</script>
+<script>window.APP_VERSION = '2026-11-01.1';</script>
 <script src="config.js"></script>
 <script>
 'use strict';
@@ -661,11 +674,14 @@ function splitAlts(s){ return String(s).split('/').map(x => x.trim()).filter(Boo
 
 function parseBank(text){
   const items = [], skipped = [], seen = new Set();
-  let group = '';
+  let group = '', headKey = '';
   String(text || '').split(/\r?\n/).forEach((raw, idx) => {
     let line = raw.trim();
     if (!line || line.startsWith('//')) return;
-    if (line.startsWith('#')){ group = line.replace(/^#+\s*/, '').trim(); return; }   // 單元名稱
+    if (line.startsWith('#')){ group = line.replace(/^#+\s*/, '').trim(); headKey = ''; return; }   // 單元名稱
+    // 「- 」開頭：屬於上一個單字的延伸題（片語、例句、翻譯）
+    const sub = /^[-－•・]\s+/.test(line);
+    if (sub) line = line.replace(/^[-－•・]\s+/, '');
     const star = /^[✓✔☑★*]/.test(line);
     if (star) line = line.replace(/^[✓✔☑★*]+\s*/, '');
     const parts = splitLine(line).map(s => s.trim());
@@ -681,12 +697,16 @@ function parseBank(text){
     }
     item.group = group;
     item.star = star;
+    item.head = sub ? headKey : '';
     item.cloze = ((item.sentence.match(/\[([^\]]+)\]/) || [])[1] || '').trim();
     item.key = item.en.toLowerCase() + (item.clozeOnly ? '|' + item.cloze.toLowerCase() : '');
+    if (!sub) headKey = item.key;
     if (seen.has(group + '|' + item.key)) return;   // 同一個單元裡重複的字只留一個
     seen.add(group + '|' + item.key);
     items.push(item);
   });
+  const hasSubs = new Set(items.filter(x => x.head).map(x => x.group + '|' + x.head));
+  items.forEach(x => { x.isHead = !x.head && hasSubs.has(x.group + '|' + x.key); });
   return { items, skipped };
 }
 
@@ -1133,7 +1153,7 @@ async function saveBankCloud(auto, msg){
   if (!bank.items.length) return toast('題庫是空的');
   if (auto !== true && !confirm(`要把這 ${bank.items.length} 題存到雲端嗎？\n全部學生登入後都會使用這份題庫。`)) return;
   const items = bank.items.map(x => ({group: x.group, star: x.star, en: x.clozeOnly ? x.sentence : x.en, zh: x.zh,
-    sentence: x.clozeOnly ? '' : x.sentence, sentZh: x.clozeOnly ? '' : x.sentZh}));
+    sentence: x.clozeOnly ? '' : x.sentence, sentZh: x.clozeOnly ? '' : x.sentZh, head: x.head || ''}));
   const btn = $('#saveCloud'); btn.disabled = true; btn.textContent = '☁️ 存到雲端中…';
   try {
     const j = await api('saveBank', {items}, 60000);
@@ -1205,7 +1225,8 @@ function wordLine(x, extra){
   const lv = levelOf(x);
   const badge = {wrong: '<span class="badge b-wrong">錯題</span>', mastered: '<span class="badge b-m">熟練</span>', learning: '<span class="badge b-l">練習中</span>', new: '<span class="badge" style="background:var(--line);color:var(--muted)">還沒考</span>'}[lv];
   const word = x.clozeOnly ? x.cloze : x.en;
-  return `<li><span class="grow"><b>${h(word)}</b> <button class="say" data-say="${h(splitAlts(word)[0])}" aria-label="播放">🔊</button> <span class="muted">${h(x.zh)}</span>
+  return `<li${x.head ? ' style="padding-left:18px"' : ''}><span class="grow">${x.head ? '<span class="muted">↳ </span>' : ''}<b>${h(word)}</b> <button class="say" data-say="${h(splitAlts(word)[0])}" aria-label="播放">🔊</button> <span class="muted">${h(x.zh)}</span>
+    ${x.isHead ? `<button class="soft fam" data-g="${h(x.group)}" data-k="${h(x.key)}" style="min-height:30px;padding:2px 10px;font-size:13px;margin-left:4px">▶ 練這個字</button>` : ''}
     ${p ? `<br><span class="small muted">對 ${p.r} · 錯 ${p.w} · 連續答對 ${p.s}${extra ? ' · ' + extra(p) : ''}</span>` : ''}
     ${x.sentence && lv === 'wrong' ? `<br><span class="small">${clozeHTML(x.sentence, true)}</span>` : ''}</span>${badge}</li>`;
 }
@@ -1231,6 +1252,7 @@ function renderAllWords(){
       <ul class="plist" style="max-height:none">${items.map(x => wordLine(x)).join('')}</ul></details></div>`;
   }).join('') || '<div class="card muted">題庫是空的</div>';
   bindSay($('#minePanel'));
+  $('#minePanel').querySelectorAll('.fam').forEach(b => b.addEventListener('click', () => startFamily(b.dataset.g, b.dataset.k)));
 }
 $('#mineTabs').addEventListener('change', e => { mineTab = e.target.value; renderMine(); });
 $('#mineBack').addEventListener('click', () => { renderHome(); show('home'); });
@@ -1273,6 +1295,41 @@ function renderHome(){
 }
 function saveSettings(){ store.set('settings', settings); }
 
+// 依單字練習：標題單字＋它底下的片語、例句、翻譯，依講義順序一次考完
+function familyItems(g, headKey){
+  return bank.items.filter(x => x.group === g && ((x.key === headKey && !x.head) || x.head === headKey));
+}
+function startFamily(g, headKey){
+  const items = familyItems(g, headKey);
+  if (!items.length) return toast('找不到這個單字');
+  const hasMC = new Set(bank.items.filter(x => x.zh && !x.clozeOnly).map(x => x.zh)).size >= 2;
+  const qs = [];
+  items.forEach(it => {
+    const el = eligibleTypes(it, Object.keys(TYPES), hasMC);
+    const want = it.clozeOnly ? ['cloze'] : ['zh2en', 'cloze'];
+    const ts = want.filter(t => el.includes(t));
+    (ts.length ? ts : el.slice(0, 1)).forEach(t => qs.push(makeQuestion(it, t)));
+  });
+  if (!qs.length) return toast('這個單字沒有可以出的題目');
+  markSeen([g]);
+  quiz = { qs, i: 0, results: [], pool: items, mode: 'family', family: [g, headKey], qid: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) };
+  show('quiz');
+  renderQuestion();
+}
+function renderFamilies(){
+  const heads = bank.items.filter(x => x.isHead);
+  $('#familyBox').hidden = !heads.length;
+  if (!heads.length) return;
+  const cur = $('#familySel').value;
+  const groups = [...new Set(heads.map(x => x.group))];
+  $('#familySel').innerHTML = groups.map(g => `<optgroup label="${h(g || '未分類')}">` + heads.filter(x => x.group === g).map(x => {
+    const n = familyItems(g, x.key).length;
+    const v = g + '\u0001' + x.key;
+    return `<option value="${h(v)}" ${v === cur ? 'selected' : ''}>${h(x.en)}　${h(x.zh)}（${n} 題）</option>`;
+  }).join('') + '</optgroup>').join('');
+}
+$('#familyGo').addEventListener('click', () => { const [g, k] = $('#familySel').value.split('\u0001'); startFamily(g, k); });
+
 // 只考某一個單元
 function startUnit(g){
   markSeen([g]);
@@ -1309,7 +1366,9 @@ function scopePool(){
 function renderScope(){
   const groups = groupsOf(bank.items).filter(([g]) => g);
   const stars = bank.items.filter(x => x.star).length;
-  $('#scopeCard').hidden = groups.length < 2 && !stars;
+  const heads = bank.items.filter(x => x.isHead).length;
+  $('#scopeCard').hidden = groups.length < 2 && !stars && !heads;
+  renderFamilies();
   $('#starChip').hidden = !stars;
   $('#starOnly').checked = !!settings.starOnly;
   $('#starCount').textContent = `講義上打勾的 ${stars} 個字`;
@@ -1353,6 +1412,7 @@ $('#shareBank').addEventListener('click', shareBank);
 /* ---------------- 題庫編輯 ---------------- */
 let parseTimer = null;
 function openBank(){
+  renderAiBox();
   $('#saveCloud').hidden = !(isCloud() && isTeacher());
   $('#bankText').value = bankText;
   renderParse();
@@ -1364,7 +1424,7 @@ function renderParse(){
   $('#parseSum').textContent = `辨識到 ${p.items.length} 題（可考克漏字 ${cloze} 題）` + (p.skipped.length ? `，第 ${p.skipped.slice(0, 5).join('、')} 行無法辨識` : '');
   $('#parseList').innerHTML = p.items.slice(0, 300).map(x => {
     const kind = x.clozeOnly ? '克漏字' : (/\s/.test(x.en) ? '片語／句' : '單字') + (x.cloze ? '＋克漏字' : '');
-    return `<li><span><b>${x.star ? '✓ ' : ''}${h(x.clozeOnly ? x.sentence : x.en)}</b> <span class="muted">${h(x.zh)}</span></span><span class="k">${kind}</span></li>`;
+    return `<li${x.head ? ' style="padding-left:16px"' : ''}><span>${x.head ? '↳ ' : ''}<b>${x.star ? '✓ ' : ''}${h(x.clozeOnly ? x.sentence : x.en)}</b> <span class="muted">${h(x.zh)}</span></span><span class="k">${x.head ? (x.clozeOnly ? '填空' : isSentence(x.en) ? '翻譯' : '片語') : kind}</span></li>`;
   }).join('') || '<li class="muted">還沒有題目</li>';
 }
 function commitBank(){
@@ -1551,12 +1611,23 @@ async function importFile(f){
 let pendingImport = [];
 // 合併：舊題目保留原本順序，同一個字換成新版本，新的字加在後面
 function mergeLines(oldLines, newLines){
-  const keyOf = l => { const it = parseBank(l).items[0]; return it ? it.key : null; };
-  const newMap = new Map();
-  newLines.forEach(l => { const k = keyOf(l); if (k) newMap.set(k, l); });
+  // 以「單字＋底下的 - 延伸題」為一組合併；同一個單字整組換成新版本
+  const blocks = lines => {
+    const out = [];
+    lines.forEach(l => {
+      if (/^\s*[-－•・]\s+/.test(l) && out.length && out[out.length - 1].key) out[out.length - 1].lines.push(l);
+      else { const it = parseBank(l).items[0]; out.push({key: it ? it.key : null, lines: [l]}); }
+    });
+    return out;
+  };
+  const oldB = blocks(oldLines), newB = blocks(newLines);
+  const newMap = new Map(newB.filter(b => b.key).map(b => [b.key, b]));
   const out = [], used = new Set();
-  oldLines.forEach(l => { const k = keyOf(l); if (k && newMap.has(k)){ if (!used.has(k)){ out.push(newMap.get(k)); used.add(k); } } else out.push(l); });
-  newLines.forEach(l => { const k = keyOf(l); if (!k) out.push(l); else if (!used.has(k)){ out.push(l); used.add(k); } });
+  oldB.forEach(b => {
+    if (b.key && newMap.has(b.key)){ if (!used.has(b.key)){ out.push(...newMap.get(b.key).lines); used.add(b.key); } }
+    else out.push(...b.lines);
+  });
+  newB.forEach(b => { if (!b.key || !used.has(b.key)){ out.push(...b.lines); if (b.key) used.add(b.key); } });
   return out;
 }
 // 把內容放進某個單元：單元已存在就留在原本的位置（merge=true 時保留舊題目），不存在就加到最後
@@ -1592,7 +1663,8 @@ function openImport(results){
   const fileGroups = [...new Set(ok.flatMap(r => r.groups))];
   $('#impSummary').innerHTML = results.map(r => r.error
       ? `<div class="bad-line">❌ ${h(r.name)}：${h(r.error)}</div>`
-      : `<div>${r.count ? '✅' : '⚠️'} ${h(r.name)}：<b>${r.count}</b> 題${r.note ? '（' + h(r.note) + '）' : ''}</div>`).join('');
+      : `<div>${r.count ? '✅' : '⚠️'} ${h(r.name)}：<b>${r.count}</b> 題${r.note ? '（' + h(r.note) + '）' : ''}</div>` +
+        (r.checks && r.checks.length ? `<ul class="small" style="margin:4px 0 6px;padding-left:20px;color:var(--warn)">${r.checks.map(c => `<li>${h(c)}</li>`).join('')}</ul>` : '')).join('');
   const existing = groupsOf(parseBank($('#bankText').value).items).map(([g]) => g).filter(Boolean);
   $('#impUnit').value = suggestUnit();
   $('#impUnitChips').innerHTML = (existing.length ? '<span class="small muted" style="width:100%">或點選已有的單元：</span>' : '') + existing.slice(-12).map(g => `<button type="button" data-g="${h(g)}">${h(g)}</button>`).join('');
@@ -1602,8 +1674,8 @@ function openImport(results){
   $('#impKeep').checked = false;
   document.querySelector('input[name=impMode][value=merge]').checked = true;
   const items = parseBank(ok.map(r => r.text).join('\n')).items;
-  $('#impPreview').innerHTML = items.slice(0, 50).map(x => `<li><span><b>${x.star ? '✓ ' : ''}${h(x.clozeOnly ? x.sentence : x.en)}</b> <span class="muted">${h(x.zh)}</span></span><span class="k">${x.cloze ? '克漏字' : '單字'}</span></li>`).join('') +
-    (items.length > 50 ? `<li class="muted">…還有 ${items.length - 50} 題</li>` : '') ||
+  $('#impPreview').innerHTML = items.slice(0, 80).map(x => `<li${x.head ? ' style="padding-left:16px"' : ''}><span>${x.head ? '↳ ' : ''}<b>${x.star ? '✓ ' : ''}${h(x.clozeOnly ? x.sentence : x.en)}</b> <span class="muted">${h(x.zh)}</span></span><span class="k">${x.head ? (x.clozeOnly ? '填空' : isSentence(x.en) ? '翻譯' : '片語') : x.cloze ? '克漏字' : '單字'}</span></li>`).join('') +
+    (items.length > 80 ? `<li class="muted">…還有 ${items.length - 80} 題</li>` : '') ||
     '<li class="muted">沒有整理出題目。可以按「匯入」把原始文字放進題庫自己整理，或用「🤖 用 AI 整理」。</li>';
   $('#impOk').disabled = !ok.length;
   $('#impOk').textContent = total ? `匯入 ${total} 題` : '仍然匯入（只有原始文字）';
@@ -1679,6 +1751,144 @@ $('#fileInput').addEventListener('change', async e => {
   openImport(results);
 });
 
+/* ---------------- 🤖 AI 辨識講義（Claude 讀照片：印刷的是題目、手寫的是答案） ---------------- */
+const AI_MODEL = 'claude-opus-5-5';
+const AI_PROMPT_EXTRACT = `你是英文老師的助手。請把這張英文講義／課本頁面整理成「單字小考題庫」。只輸出題庫內容，不要任何說明，不要用 \`\`\` 包起來，不要輸出 # 開頭的行。
+
+【格式】每行一題，欄位用 | 分隔。
+1. 標題單字（講義上有編號或粗體的單字、片語）：
+   英文 | 中文意思
+   例：museum | 博物館
+   有好幾個詞性就把中文合併：please | 請；拜託；取悅
+2. 屬於這個單字的延伸題，寫在它下面，行首加「- 」：
+   ‧片語：- 英文片語 | 中文
+     例：- wait for | 等待…
+     例：- can't wait to | 等不及…
+   ‧例句填空（e.g. 句子、練習題）：寫出完整句子，空格的答案用 [ ] 括起來；有中文翻譯就放在 | 後面
+     例：- I [waited for] her outside while she went in to see the doctor.
+     例：- Come and play [with] Andy and Katie. | 過來和安迪和凱蒂一起玩。
+     一句裡有好幾個空格：每個空格各寫一行，每行只放一個 [ ]，其他空格直接填入答案。
+   ‧翻譯題（「翻」、中翻英）：- 英文句子 | 中文句子
+     例：- Many people are having a picnic in front of the museum. | 很多人正在博物館前野餐。
+     有其他可接受的寫法用 / 分開：- Time and tide wait for no one./Time flies. | 歲月不饒人。
+
+【規則】
+- 手寫的字通常是答案，印刷的字是題目。答案要是正確的英文：手寫拼錯就改正（例如 hure → hurt）。
+- 空格沒有寫答案時，依上下文填入最合理的答案，並在那一行的上一行加：// 請確認：（原因）
+- 看不清楚、不確定、被切掉看不完整的內容不要編造：跳過，或在上一行加 // 請確認：（原因）
+- 文法說明、表格標題、頁碼、題號不要輸出。
+- 依照講義上的順序輸出。`;
+
+let aiKeyCache = '';
+async function getAiKey(){
+  if (aiKeyCache) return aiKeyCache;
+  const j = await api('getAiKey');
+  aiKeyCache = j.key || '';
+  return aiKeyCache;
+}
+async function setupAiKey(){
+  const key = (prompt('請貼上 Claude API 金鑰（sk-ant- 開頭）\n\n取得方式：到 console.anthropic.com → 登入 → API Keys → Create Key。帳戶需要先儲值（Billing）。\n\n金鑰只會存在你的 Google 後台，學生看不到。') || '').trim();
+  if (!key) return false;
+  try {
+    toast('檢查金鑰中…', 10000);
+    const r = await fetch('https://api.anthropic.com/v1/models?limit=1', {headers: aiHeaders(key)});
+    if (r.status === 401 || r.status === 403) throw new Error('金鑰無效，請確認有完整複製');
+    if (!r.ok) throw new Error('暫時無法檢查金鑰（' + r.status + '）');
+    await api('setAiKey', {key});
+    aiKeyCache = key;
+    toast('✅ AI 金鑰設定完成', 3000);
+    renderAiBox();
+    return true;
+  } catch(e){ alert('❌ ' + e.message); return false; }
+}
+function aiHeaders(key){
+  return {
+    'content-type': 'application/json',
+    'x-api-key': key,
+    'anthropic-version': '2026-10-21',
+    'anthropic-beta': 'server-side-fallback-2026-07-01',   // 被安全檢查擋下時，自動換推薦的模型重試
+    'anthropic-dangerous-direct-browser-access': 'true'
+  };
+}
+// 串流讀取 Claude 的回覆（邊讀邊顯示進度，也避免手機等太久斷線）
+async function aiExtract(file, onProgress){
+  const key = await getAiKey();
+  if (!key) throw new Error('還沒設定 AI 金鑰');
+  const isPdf = /pdf$/i.test(file.type) || /\.pdf$/i.test(file.name);
+  if (isPdf && file.size > 25e6) throw new Error('PDF 太大（超過 25MB）');
+  const media = isPdf
+    ? {type: 'document', source: {type: 'base64', media_type: 'application/pdf', data: await fileToBase64(file)}}
+    : {type: 'image', source: {type: 'base64', media_type: 'image/jpeg', data: (await imageToJpeg(file, 1568)).data}};
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: aiHeaders(key),
+    body: JSON.stringify({
+      model: AI_MODEL,
+      max_tokens: 16000,
+      stream: true,
+      fallbacks: 'default',
+      output_config: {effort: 'low'},
+      messages: [{role: 'user', content: [media, {type: 'text', text: AI_PROMPT_EXTRACT}]}]
+    })
+  });
+  if (!res.ok){
+    let msg = '';
+    try { msg = ((await res.json()).error || {}).message || ''; } catch(e){}
+    if (res.status === 401) throw new Error('AI 金鑰無效，請重新設定');
+    if (res.status === 429) throw new Error('AI 使用太頻繁，請稍等一分鐘再試');
+    if (/credit|balance|billing/i.test(msg)) throw new Error('Claude 帳戶餘額不足，請到 console.anthropic.com 儲值');
+    throw new Error('AI 辨識失敗（' + res.status + '）' + (msg ? '：' + msg : ''));
+  }
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let buf = '', text = '', stop = null;
+  for (;;){
+    const {value, done} = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, {stream: true});
+    let i;
+    while ((i = buf.indexOf('\n\n')) >= 0){
+      const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
+      const data = chunk.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).join('');
+      if (!data) continue;
+      let ev; try { ev = JSON.parse(data); } catch(e){ continue; }
+      if (ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta'){
+        text += ev.delta.text;
+        if (onProgress) onProgress(text.split('\n').filter(l => l.trim() && !l.startsWith('//')).length);
+      } else if (ev.type === 'message_delta' && ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason;
+      else if (ev.type === 'error') throw new Error('AI 辨識失敗：' + ((ev.error || {}).message || '伺服器忙碌，請再試一次'));
+    }
+  }
+  if (stop === 'refusal') throw new Error('AI 無法處理這份檔案，請換一張照片試試');
+  text = text.replace(/^```[a-z]*\s*/i, '').replace(/```\s*$/, '').trim();
+  const checks = text.split('\n').filter(l => /^\/\/\s*請確認/.test(l.trim())).map(l => l.trim().replace(/^\/\/\s*/, ''));
+  const count = parseBank(text).items.length;
+  if (stop === 'max_tokens') checks.push('請確認：這頁內容太多，最後幾題可能沒有辨識完');
+  return {text, count, groups: [], checks, note: 'AI 辨識' + (checks.length ? `，${checks.length} 處請確認` : '')};
+}
+function renderAiBox(){
+  const ok = isCloud() && isTeacher();
+  $('#aiUpload').hidden = !ok;
+  $('#aiKeyBtn').hidden = !ok;
+  $('#aiNeedTeacher').hidden = ok;
+}
+$('#aiKeyBtn').addEventListener('click', setupAiKey);
+$('#aiInput').addEventListener('change', async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  if (!files.length) return;
+  try { if (!(await getAiKey()) && !(await setupAiKey())) return; }
+  catch(err){ return alert('❌ ' + err.message); }
+  const results = [];
+  for (let i = 0; i < files.length; i++){
+    const f = files[i], tag = files.length > 1 ? `（${i + 1}/${files.length}）` : '';
+    toast(`🤖 AI 辨識中${tag}：正在讀取講義…（約 20～60 秒）`, 180000);
+    try {
+      results.push(Object.assign({name: f.name}, await aiExtract(f, n => toast(`🤖 AI 辨識中${tag}：已整理出 ${n} 行…`, 180000))));
+    } catch(err){ results.push({name: f.name, error: err.message, text: '', count: 0, groups: []}); }
+  }
+  $('#toast').classList.remove('on');
+  openImport(results);
+});
+
 $('#aiPrompt').textContent = AI_PROMPT;
 $('#copyPrompt').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(AI_PROMPT); toast('已複製指令'); }
@@ -1748,6 +1958,13 @@ function eligibleTypes(item, sel, hasMC){
   if (sel.includes('mc') && item.zh && hasMC) t.push('mc');
   return t;
 }
+// 題型標籤：中翻英再細分成「單字／片語／翻譯」
+const isSentence = s => /[.!?。？！]\s*$/.test(s) || String(s).trim().split(/\s+/).length >= 5;
+function typeLabel(q){
+  if (q.type === 'zh2en') return isSentence(q.item.en) ? '翻譯' : /\s/.test(q.item.en) ? '片語' : '中翻英';
+  return TYPES[q.type].label;
+}
+function headOf(item){ return item.head ? bank.items.find(x => x.group === item.group && x.key === item.head) : null; }
 function makeQuestion(item, type){
   const q = { item, type, answers: type === 'sent' ? [plainSentence(item.sentence)] : splitAlts(type === 'cloze' ? item.cloze : item.en) };
   if (type === 'mc'){
@@ -1818,13 +2035,14 @@ function renderQuestion(){
   quiz.answered = false; quiz.hint = false;
   $('#qProgress').textContent = `${quiz.i + 1} / ${quiz.qs.length}`;
   $('#qBar').style.width = (quiz.i / quiz.qs.length * 100) + '%';
-  $('#qType').textContent = TYPES[q.type].label;
+  $('#qType').textContent = typeLabel(q);
   $('#feedback').innerHTML = '';
 
   let p = '', instr = '';
   if (q.type === 'zh2en'){
-    instr = '用英文怎麼說？';
-    p = showText ? `<div class="big">${h(it.zh)}</div>` : `<div class="hidden-prompt">🔊 聽中文，說出／拼出英文</div>`;
+    const sentQ = isSentence(it.en);
+    instr = sentQ ? '這句英文怎麼說？（用 🎤 說比較快）' : /\s/.test(it.en) ? '這個片語英文怎麼說？' : '用英文怎麼說？';
+    p = showText ? `<div class="${sentQ ? 'sentence' : 'big'}" ${sentQ ? 'style="text-align:center"' : ''}>${h(it.zh)}</div>` : `<div class="hidden-prompt">🔊 聽中文，說出／拼出英文</div>`;
   } else if (q.type === 'listen'){
     instr = '聽發音，拼出英文';
     p = `<div class="hidden-prompt">🔊 聽英文，拼出你聽到的${/\s/.test(q.answers[0]) ? '句子' : '單字'}</div>`;
@@ -1840,6 +2058,10 @@ function renderQuestion(){
     p = showText ? `<div class="sentence" style="text-align:center">${h(it.sentZh)}</div>` : `<div class="hidden-prompt">🔊 聽中文句子，說出英文</div>`;
     if (!it.clozeOnly) p += `<div class="hint-zh" style="text-align:center">關鍵字：${h(it.zh)}</div>`;
   }
+  // 延伸題：顯示它屬於哪個單字（依單字練習時一律顯示；一般考試只在例句、翻譯題顯示，避免洩漏片語答案）
+  const hd = headOf(it);
+  if (hd && (quiz.mode === 'family' || q.type === 'cloze' || (q.type === 'zh2en' && isSentence(it.en))))
+    p = `<div><span class="tag" style="background:var(--bg);color:var(--muted)">📌 ${h(hd.en)}　${h(hd.zh)}</span></div>` + p;
   $('#qPrompt').innerHTML = p;
   $('#qInstr').textContent = instr;
   $('#replayBtn').hidden = !canTTS;
@@ -1908,7 +2130,7 @@ function submit(ans, viaVoice){
   quiz.answered = true;
   if (!quiz.results[quiz.i]){
     const prev = progress[it.key] ? Object.assign({}, progress[it.key]) : null;
-    const rec = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), qid: quiz.qid, t: Date.now(), key: it.key, en: it.clozeOnly ? plainSentence(it.sentence) : it.en, type: TYPES[q.type].label,
+    const rec = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), qid: quiz.qid, t: Date.now(), key: it.key, en: it.clozeOnly ? plainSentence(it.sentence) : it.en, type: typeLabel(q),
                   ok, ans, correct: q.type === 'mc' ? it.zh : q.answers.join(' / ') };
     quiz.results[quiz.i] = { q, user: ans, ok, prev, rec };
     applyResult(it.key, ok);
@@ -2005,7 +2227,7 @@ function renderResult(){
     const target = r.q.type === 'cloze' ? clozeHTML(it.sentence, true) : h(it.en);
     return `<li><span class="ic">${r.ok ? '✅' : '❌'}</span><div class="grow">
       <div class="en">${target} <button class="say" data-say="${h(r.q.type === 'cloze' ? plainSentence(it.sentence) : it.en)}">🔊</button></div>
-      <div class="small muted">${h(it.zh)}　·　${TYPES[r.q.type].label}</div>
+      <div class="small muted">${h(it.zh)}　·　${typeLabel(r.q)}</div>
       ${!r.ok && r.user ? `<div class="small">你的答案：<s>${h(r.user)}</s></div>` : ''}</div></li>`;
   }).join('');
   $('#rlist').querySelectorAll('[data-say]').forEach(b => b.addEventListener('click', () => sayEn(b.dataset.say)));
@@ -2022,7 +2244,7 @@ function renderResult(){
   syncPending();
 }
 $('#retryWrong').addEventListener('click', () => startQuiz(quiz.wrong, 'retry'));
-$('#againBtn').addEventListener('click', () => startQuiz(quiz.pool, quiz.mode === 'review' ? 'review' : 'normal'));
+$('#againBtn').addEventListener('click', () => quiz.mode === 'family' ? startFamily(quiz.family[0], quiz.family[1]) : startQuiz(quiz.pool, quiz.mode === 'review' ? 'review' : 'normal'));
 $('#homeBtn').addEventListener('click', () => { renderHome(); show('home'); });
 
 /* ---------------- 啟動 ---------------- */
