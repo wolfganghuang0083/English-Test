@@ -115,7 +115,9 @@
 
 **第一次使用要設定 Claude API 金鑰：**
 1. 到 <https://console.anthropic.com> 註冊／登入
-2. 左邊「Billing」先儲值（用信用卡，例如 5 美元）
+2. 取得額度（二選一）：
+   - **有 Claude Max／Ultra／Team 方案**：在 claude.ai「設定 → 帳單（Billing）」的「API credits」把 Console 組織連結起來，每個月會送 API 額度（Max 每月 100 美元），不用綁信用卡
+   - 沒有的話：在 Console 左邊「Billing」用信用卡儲值（例如 5 美元）
 3. 「API Keys」→「Create Key」→ 複製 `sk-ant-` 開頭的金鑰
 4. 回到小考網頁，老師帳號 →「✏️ 上傳／編輯題庫」→「🔑 設定／更換 AI 金鑰」→ 貼上
 
