@@ -357,7 +357,11 @@ s{color:var(--bad)}
     <label class="btn primary block" id="aiUpload" for="aiInput" style="min-height:52px">📷 拍照／選講義給 AI 辨識</label>
     <input type="file" id="aiInput" accept="image/*,.pdf,application/pdf" multiple hidden>
     <p class="small muted" style="margin:10px 0 0">AI 會把講義上的<b>單字、片語、例句填空、翻譯題</b>整理成題目（手寫的部分當作答案），同一個單字的題目會放在一起，學生可以「依單字練習」。可一次選多張。每頁約 NT$2～3，從你的 Claude 帳戶扣款。</p>
-    <button class="ghost" id="aiKeyBtn" style="margin-top:4px">🔑 設定／更換 AI 金鑰</button>
+    <div class="row" style="margin-top:4px">
+      <button class="ghost" id="aiCheckBtn">🔍 檢查 AI 設定</button>
+      <button class="ghost" id="aiKeyBtn">🔑 設定／更換 AI 金鑰</button>
+    </div>
+    <div class="small" id="aiStatus" style="margin-top:4px"></div>
     <p class="small muted" id="aiNeedTeacher" style="margin:8px 0 0">要用老師帳號登入才能使用 AI 辨識。</p>
   </div>
 
@@ -478,7 +482,7 @@ movie/film | 電影</pre>
 <div class="toast" id="toast"></div>
 <div id="updateBar" hidden style="position:fixed;top:0;left:0;right:0;z-index:9;background:var(--accent);color:var(--accent-ink);text-align:center;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:700;cursor:pointer">🔄 有新版本，點這裡更新</div>
 
-<script>window.APP_VERSION = '2026-11-01.1';</script>
+<script>window.APP_VERSION = '2026-11-01.2';</script>
 <script src="config.js"></script>
 <script>
 'use strict';
@@ -1869,9 +1873,34 @@ function renderAiBox(){
   const ok = isCloud() && isTeacher();
   $('#aiUpload').hidden = !ok;
   $('#aiKeyBtn').hidden = !ok;
+  $('#aiCheckBtn').hidden = !ok;
   $('#aiNeedTeacher').hidden = ok;
 }
 $('#aiKeyBtn').addEventListener('click', setupAiKey);
+// 檢查：後台有沒有存金鑰 → 金鑰能不能用 → 帳戶有沒有額度（送一個極短的請求，花費不到 0.01 台幣）
+async function checkAi(){
+  const out = $('#aiStatus');
+  const say = (html) => { out.innerHTML = html; };
+  say('🔍 檢查中…');
+  let key = '';
+  try { aiKeyCache = ''; key = await getAiKey(); }
+  catch(e){ return say(`❌ 連不上後台：${h(e.message)}`); }
+  if (!key) return say('⚠️ <b>後台還沒有存 AI 金鑰</b>。請按「🔑 設定／更換 AI 金鑰」貼上 sk-ant- 開頭的金鑰。');
+  const masked = h(key.slice(0, 10) + '…' + key.slice(-4));
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {method: 'POST', headers: aiHeaders(key),
+      body: JSON.stringify({model: AI_MODEL, max_tokens: 16, output_config: {effort: 'low'}, messages: [{role: 'user', content: 'Reply OK'}]})});
+    let msg = '';
+    if (!r.ok){ try { msg = ((await r.json()).error || {}).message || ''; } catch(e){} }
+    if (r.ok) return say(`✅ <b>AI 設定正常</b>：後台已存金鑰（${masked}），金鑰有效，帳戶有額度，可以開始辨識講義。`);
+    if (r.status === 401) return say(`❌ 後台存的金鑰（${masked}）<b>無效或已被刪除</b>。請到 console.anthropic.com → API Keys 建立新的金鑰，再按「🔑 設定／更換 AI 金鑰」。`);
+    if (/credit|balance|billing/i.test(msg)) return say(`⚠️ 金鑰有效（${masked}），但<b>帳戶沒有額度</b>。Max 方案請到 claude.ai「設定 → 帳單」的「API credits」連結這個金鑰所在的 Console 組織；或在 Console 的 Billing 儲值。`);
+    if (r.status === 429) return say(`⚠️ 金鑰有效（${masked}），但目前請求太頻繁，請稍等一分鐘再檢查。`);
+    if (r.status === 403) return say(`❌ 金鑰（${masked}）沒有使用權限：${h(msg)}`);
+    return say(`⚠️ 檢查時發生問題（${r.status}）：${h(msg)}`);
+  } catch(e){ return say(`❌ 連不上 Claude：${h(e.message)}（請檢查網路）`); }
+}
+$('#aiCheckBtn').addEventListener('click', checkAi);
 $('#aiInput').addEventListener('change', async e => {
   const files = [...e.target.files]; e.target.value = '';
   if (!files.length) return;
