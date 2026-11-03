@@ -149,7 +149,11 @@ s{color:var(--bad)}
 .lv-m{background:var(--ok)}.lv-l{background:var(--accent)}.lv-w{background:var(--bad)}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:0}
 .wchips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 12px}
-.wchips span{font-size:13px;padding:3px 9px;border-radius:99px;background:var(--bad-bg);color:var(--bad);font-weight:600}
+.wchips span,.wchips button{font-size:13px;padding:3px 9px;border-radius:99px;background:var(--bad-bg);color:var(--bad);font-weight:600}
+.wchips button{border:none;min-height:30px;cursor:pointer}
+.lvbtn{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:6px 10px;font-size:13px;font-weight:500;min-height:38px;color:var(--text);cursor:pointer}
+.lvbtn::after{content:" ›";color:var(--muted)}
+.lvbtn,.wchips button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .rlist li.click{cursor:pointer}
 .badge{font-size:11px;padding:1px 7px;border-radius:6px;font-weight:700;white-space:nowrap;align-self:center}
 .b-wrong{background:var(--bad-bg);color:var(--bad)}.b-m{background:var(--ok-bg);color:var(--ok)}.b-l{background:var(--accent-soft);color:var(--accent)}
@@ -407,6 +411,19 @@ movie/film | 電影</pre>
   </div>
 </section>
 
+<!-- ========== WORD LIST DIALOG（點「熟練／練習中／錯題／還沒考」或錯題字） ========== -->
+<div class="modal" id="lvModal" hidden>
+  <div class="sheet">
+    <div class="row" style="justify-content:space-between;margin-bottom:6px">
+      <h2 style="margin:0;font-size:19px" id="lvTitle"></h2>
+      <button class="ghost" id="lvClose" aria-label="關閉">✕</button>
+    </div>
+    <div class="small muted" id="lvDesc"></div>
+    <ul class="plist" id="lvList" style="max-height:52vh"></ul>
+    <div class="row" style="margin-top:12px"><button class="primary grow big" id="lvGo"></button></div>
+  </div>
+</div>
+
 <!-- ========== IMPORT DIALOG ========== -->
 <div class="modal" id="importModal" hidden>
   <div class="sheet">
@@ -482,7 +499,7 @@ movie/film | 電影</pre>
 <div class="toast" id="toast"></div>
 <div id="updateBar" hidden style="position:fixed;top:0;left:0;right:0;z-index:9;background:var(--accent);color:var(--accent-ink);text-align:center;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:700;cursor:pointer">🔄 有新版本，點這裡更新</div>
 
-<script>window.APP_VERSION = '2026-11-01.2';</script>
+<script>window.APP_VERSION = '2026-11-03.1';</script>
 <script src="config.js"></script>
 <script>
 'use strict';
@@ -992,14 +1009,66 @@ function renderProgress(){
   it.forEach(x => c[levelOf(x)]++);
   const pct = n => it.length ? (n / it.length * 100) + '%' : '0';
   $('#lvBar').innerHTML = `<i class="lv-m" style="width:${pct(c.mastered)}"></i><i class="lv-l" style="width:${pct(c.learning)}"></i><i class="lv-w" style="width:${pct(c.wrong)}"></i>`;
-  $('#lvStat').innerHTML = `<div><span class="dot lv-m"></span>熟練 <b>${c.mastered}</b></div><div><span class="dot lv-l"></span>練習中 <b>${c.learning}</b></div>` +
-    `<div><span class="dot lv-w"></span>錯題 <b>${c.wrong}</b></div><div><span class="dot" style="background:var(--line)"></span>還沒考 <b>${c.new}</b></div>`;
+  $('#lvStat').innerHTML = [['mastered', 'lv-m', '熟練'], ['learning', 'lv-l', '練習中'], ['wrong', 'lv-w', '錯題'], ['new', '', '還沒考']]
+    .map(([lv, cls, name]) => `<button type="button" class="lvbtn" data-lv="${lv}"><span class="dot ${cls}" ${cls ? '' : 'style="background:var(--line)"'}></span>${name} <b>${c[lv]}</b></button>`).join('');
+  $('#lvStat').querySelectorAll('.lvbtn').forEach(b => b.addEventListener('click', () => openLevel(b.dataset.lv)));
   const wrong = it.filter(x => levelOf(x) === 'wrong').sort((a, b) => progress[b.key].w - progress[a.key].w);
-  $('#wrongChips').innerHTML = wrong.slice(0, 30).map(x => `<span>${h(x.clozeOnly ? x.cloze : x.en)}${progress[x.key].w > 1 ? ' ×' + progress[x.key].w : ''}</span>`).join('') + (wrong.length > 30 ? `<span>…還有 ${wrong.length - 30} 個</span>` : '');
+  $('#wrongChips').innerHTML = wrong.slice(0, 30).map(x => `<button type="button" data-g="${h(x.group)}" data-k="${h(x.key)}">${h(x.clozeOnly ? x.cloze : x.en)}${progress[x.key].w > 1 ? ' ×' + progress[x.key].w : ''}</button>`).join('') +
+    (wrong.length > 30 ? `<button type="button" data-more="1">…還有 ${wrong.length - 30} 個</button>` : '');
+  $('#wrongChips').querySelectorAll('button').forEach(b => b.addEventListener('click', () =>
+    b.dataset.more ? openLevel('wrong') : openWord(bank.items.find(x => x.group === b.dataset.g && x.key === b.dataset.k))));
   $('#reviewBtn').textContent = wrong.length ? `📕 錯題本複習（${wrong.length} 個字）` : '📕 錯題本是空的';
   $('#reviewBtn').disabled = !wrong.length;
   if (!isCloud()) $('#syncStatus').textContent = session && session.mode === 'local' ? '📱 紀錄存在這支手機' : '';
 }
+
+// 點「熟練／練習中／錯題／還沒考」：列出是哪些字，並可以直接考這一組
+const LV_INFO = {
+  mastered: ['🟢 熟練的字', '連續答對 3 次以上的字。可以偶爾複習，保持記憶。', n => `▶ 複習這 ${n} 個字`],
+  learning: ['🔵 練習中的字', '答對過、但還沒連續答對 3 次的字。再多練幾次就熟練了！', n => `▶ 練習這 ${n} 個字`],
+  wrong:    ['🔴 錯題本', '錯過、還沒連續答對 2 次的字（錯 3 次以上要連續答對 3 次）。複習時題目由易到難。', n => `📕 開始錯題複習（${n} 個字）`],
+  new:      ['⚪ 還沒考的字', '還沒有作答紀錄的字，考一次看看吧！', n => `▶ 考這 ${n} 個字`]
+};
+let lvPool = [], lvMode = 'retry';
+function showLvModal(title, desc, items, goText, mode){
+  lvPool = items; lvMode = mode;
+  $('#lvTitle').textContent = title;
+  $('#lvDesc').textContent = desc;
+  $('#lvList').innerHTML = items.map(x => wordLine(x, x.head ? null : (levelOf(x) === 'wrong' ? p => `還要連續答對 <b>${Math.max(1, required(p.w) - p.s)}</b> 次` : null))).join('') ||
+    '<li class="muted">這裡目前沒有字</li>';
+  bindSay($('#lvList'));
+  $('#lvList').querySelectorAll('.fam').forEach(b => b.addEventListener('click', () => { closeLv(); startFamily(b.dataset.g, b.dataset.k); }));
+  $('#lvGo').textContent = goText;
+  $('#lvGo').disabled = !items.length;
+  $('#lvModal').hidden = false;
+  if (!(history.state && history.state.sub)){ try { history.pushState({sub: true}, ''); } catch(e){} }   // 手機返回鍵＝關閉清單
+}
+function closeLv(){ $('#lvModal').hidden = true; }
+function openLevel(lv){
+  const items = bank.items.filter(x => levelOf(x) === lv);
+  if (lv === 'wrong') items.sort((a, b) => (progress[b.key].w - progress[a.key].w) || (progress[a.key].s - progress[b.key].s));
+  const [title, desc, go] = LV_INFO[lv];
+  const limit = settings.count === 'all' ? Infinity : +settings.count;
+  if (lv !== 'wrong' && items.length > limit)   // 字很多時依「題數」設定抽題，不一次考完
+    return showLvModal(`${title}（${items.length}）`, desc, items, `▶ 從這 ${items.length} 個字考 ${limit} 題`, 'normal');
+  showLvModal(`${title}（${items.length}）`, desc, items, go(items.length), lv === 'wrong' ? 'review' : 'retry');
+}
+// 點錯題本裡的某個字：看這個字的狀況，並單獨練它
+function openWord(it){
+  if (!it) return;
+  const items = it.isHead ? familyItems(it.group, it.key) : [it];
+  const p = progress[it.key];
+  showLvModal(`📖 ${it.clozeOnly ? it.cloze : it.en}`, (it.group ? `單元：${it.group}　` : '') + (p ? `對 ${p.r} 次・錯 ${p.w} 次・連續答對 ${p.s} 次` : ''),
+    items, it.isHead ? `▶ 練這個字（含片語、例句，共 ${items.length} 題）` : '▶ 練這個字', it.isHead ? 'family' : 'review');
+}
+$('#lvClose').addEventListener('click', closeLv);
+$('#lvModal').addEventListener('click', e => { if (e.target.id === 'lvModal') closeLv(); });
+$('#lvGo').addEventListener('click', () => {
+  const pool = lvPool.slice(), mode = lvMode;
+  closeLv();
+  if (mode === 'family') return startFamily(pool[0].group, pool[0].key);
+  startQuiz(pool, mode);
+});
 
 /* ---------------- 老師後台 ---------------- */
 let tData = null;
@@ -2307,6 +2376,7 @@ window.addEventListener('popstate', () => {
   const cur = (document.querySelector('.screen.on') || {}).id;
   const stay = () => { try { history.pushState({sub: true}, ''); } catch(e){} };
   if (!$('#importModal').hidden){ $('#importModal').hidden = true; return stay(); }
+  if (!$('#lvModal').hidden){ closeLv(); return stay(); }
   if (cur === 'quiz'){ if (!quitQuiz()) stay(); return; }
   if (cur === 'bank') commitBank();
   if (SUB_SCREENS.includes(cur)){ renderHome(); show('home'); }
