@@ -141,7 +141,7 @@ function doPost(e) {
       case 'overview':      return json_(overview_());
       case 'studentDetail': {
         var sid = String(req.id || '').toLowerCase();
-        return json_({ ok: true, words: getProgressList_(sid), sessions: getHistory_(sid).slice(0, 20) });
+        return json_({ ok: true, words: getProgressList_(sid), sessions: getHistory_(sid).slice(0, 20), wrongAns: getWrongAnswers_(sid) });
       }
       case 'saveBank':      return json_(saveBank_(req.items));
       case 'ocr':           return json_(ocr_(req.name, req.mime, req.data));
@@ -303,6 +303,18 @@ function saveResults_(u, results) {
   } finally { lock.releaseLock(); }
 }
 
+/** 學生每個字最近答錯時寫了什麼（每個字最多 3 筆，新的在前） */
+function getWrongAnswers_(id) {
+  var out = {};
+  rows_(SHEETS.log).forEach(function (r) {
+    if (String(r[1]).toLowerCase() !== id || r[6] !== '✗') return;
+    var k = String(r[4]).toLowerCase().trim();
+    (out[k] = out[k] || []).push({ a: String(r[7] || ''), type: String(r[5] || ''), t: r[0] instanceof Date ? r[0].getTime() : 0 });
+  });
+  Object.keys(out).forEach(function (k) { out[k] = out[k].sort(function (a, b) { return b.t - a.t; }).slice(0, 3); });
+  return out;
+}
+
 /** 每一次考試的成績：同一個測驗ID算一次；舊資料沒有測驗ID，就把間隔 10 分鐘以內的作答算同一次 */
 function getHistory_(id) {
   var rows = rows_(SHEETS.log).filter(function (r) { return String(r[1]).toLowerCase() === id && r[0] instanceof Date; });
@@ -342,9 +354,9 @@ function overview_() {
     if (S >= 3) s.mastered++;
     var t = r[5] instanceof Date ? r[5].getTime() : 0;
     if (t > s.last) s.last = t;
-    if (!words[key]) words[key] = { key: key, w: 0, n: 0 };
+    if (!words[key]) words[key] = { key: key, w: 0, n: 0, who: [] };
     words[key].w += W;
-    if (inWrongBook_(R, W, S)) words[key].n++;
+    if (inWrongBook_(R, W, S)) { words[key].n++; words[key].who.push(s.name + (s.cls ? '（' + s.cls + '）' : '')); }
   });
   var top = Object.keys(words).map(function (k) { return words[k]; })
     .filter(function (x) { return x.w > 0; })

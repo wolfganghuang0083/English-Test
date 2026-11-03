@@ -221,9 +221,10 @@ s{color:var(--bad)}
     <div class="row"><select id="clsFilter" class="grow"></select><button class="soft" id="teacherRefresh">重新整理</button></div>
     <div class="stat" id="tSummary" style="margin-bottom:0"></div>
   </div>
-  <div class="card"><h2>全班最常錯的字（在錯題本裡的人數）</h2><div class="wchips" id="tTop"></div></div>
+  <div class="card"><h2>全班最常錯的字（點字看是哪些學生）</h2><div class="wchips" id="tTop"></div></div>
   <div class="card" id="tDetail" hidden>
     <div class="row" style="justify-content:space-between"><h2 id="tDetailName" style="margin:0"></h2><button class="ghost" id="tDetailClose">✕</button></div>
+    <div class="stat" id="tLv" style="margin:8px 0 4px"></div>
     <ul class="plist" id="tDetailList" style="max-height:none"></ul>
   </div>
   <div class="card"><h2>學生（點一下看每個字的狀況）</h2><ul class="rlist" id="tList"></ul></div>
@@ -499,7 +500,7 @@ movie/film | 電影</pre>
 <div class="toast" id="toast"></div>
 <div id="updateBar" hidden style="position:fixed;top:0;left:0;right:0;z-index:9;background:var(--accent);color:var(--accent-ink);text-align:center;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:700;cursor:pointer">🔄 有新版本，點這裡更新</div>
 
-<script>window.APP_VERSION = '2026-11-03.1';</script>
+<script>window.APP_VERSION = '2026-11-03.2';</script>
 <script src="config.js"></script>
 <script>
 'use strict';
@@ -1038,6 +1039,7 @@ function showLvModal(title, desc, items, goText, mode){
     '<li class="muted">這裡目前沒有字</li>';
   bindSay($('#lvList'));
   $('#lvList').querySelectorAll('.fam').forEach(b => b.addEventListener('click', () => { closeLv(); startFamily(b.dataset.g, b.dataset.k); }));
+  $('#lvGo').hidden = false;
   $('#lvGo').textContent = goText;
   $('#lvGo').disabled = !items.length;
   $('#lvModal').hidden = false;
@@ -1089,7 +1091,8 @@ function renderTeacher(){
   const R = list.reduce((a, s) => a + s.r, 0), W = list.reduce((a, s) => a + s.w, 0);
   const active = list.filter(s => s.r + s.w > 0).length;
   $('#tSummary').innerHTML = `<div>學生 <b>${list.length}</b></div><div>有作答 <b>${active}</b></div><div>總作答 <b>${R + W}</b></div><div>正確率 <b>${R + W ? Math.round(R / (R + W) * 100) : 0}%</b></div>`;
-  $('#tTop').innerHTML = tData.topWrong.length ? tData.topWrong.map(x => `<span>${h(x.key)}（${x.n ? x.n + ' 人' : '累計錯 ' + x.w + ' 次'}）</span>`).join('') : '<span class="muted" style="background:none">還沒有資料</span>';
+  $('#tTop').innerHTML = tData.topWrong.length ? tData.topWrong.map((x, i) => `<button type="button" data-i="${i}">${h(x.key)}（${x.n ? x.n + ' 人' : '累計錯 ' + x.w + ' 次'}）</button>`).join('') : '<span class="muted" style="background:none">還沒有資料</span>';
+  $('#tTop').querySelectorAll('button').forEach(b => b.addEventListener('click', () => openWho(tData.topWrong[+b.dataset.i])));
   $('#tList').innerHTML = list.map(s => {
     const n = s.r + s.w, acc = n ? Math.round(s.r / n * 100) : 0;
     return `<li class="click" data-id="${h(s.id)}"><span class="ic">${n ? (s.wrongBook ? '📕' : '🌟') : '💤'}</span><div class="grow">
@@ -1098,24 +1101,61 @@ function renderTeacher(){
   }).join('') || '<li class="muted">還沒有學生帳號，請在試算表的「帳號」工作表新增</li>';
   $('#tList').querySelectorAll('li[data-id]').forEach(li => li.addEventListener('click', () => showStudent(li.dataset.id)));
 }
+// 點學生：跟學生自己看到的一樣，分成 錯題／練習中／熟練／還沒考，錯題會顯示學生最近寫錯的答案
+let tStu = null, tLv = 'wrong';
 async function showStudent(id){
   const s = tData.students.find(x => x.id === id);
   $('#tDetail').hidden = false;
-  $('#tDetailName').textContent = (s ? s.name : id) + ' 的單字狀況';
+  $('#tDetailName').textContent = (s ? s.name + (s.cls ? '（' + s.cls + '）' : '') : id);
+  $('#tLv').innerHTML = '';
   $('#tDetailList').innerHTML = '<li class="muted">載入中…</li>';
   $('#tDetail').scrollIntoView({behavior: 'smooth', block: 'start'});
   try {
     const j = await api('studentDetail', {id});
-    const zhOf = {}; bank.items.forEach(x => zhOf[x.key] = x.zh);
-    const sess = (j.sessions || []).slice(0, 10);
-    const rows = j.words.map(p => Object.assign(p, {wb: inWrongBook(p)}))
-      .sort((a, b) => (b.wb - a.wb) || (b.w - a.w) || (a.s - b.s));
-    $('#tDetailList').innerHTML = rows.map(p => {
-      const badge = p.wb ? '<span class="badge b-wrong">錯題</span>' : p.s >= 3 ? '<span class="badge b-m">熟練</span>' : '<span class="badge b-l">練習中</span>';
-      return `<li><span><b>${h(p.key)}</b> <span class="muted">${h(zhOf[p.key] || '')}</span><br><span class="small muted">對 ${p.r} · 錯 ${p.w} · 連對 ${p.s} · ${fmtTime(p.t)}</span></span>${badge}</li>`;
-    }).join('') || '<li class="muted">這位學生還沒有作答紀錄</li>';
-    if (sess.length) $('#tDetailList').innerHTML = '<li><b>最近的考試</b></li>' + historyRows(sess) + '<li><b>每個字的狀況</b></li>' + $('#tDetailList').innerHTML;
+    const prog = {};
+    j.words.forEach(p => { prog[p.key] = p; });
+    const lvOf = p => !p ? 'new' : inWrongBook(p) ? 'wrong' : p.s >= 3 ? 'mastered' : 'learning';
+    // 以目前題庫為主，再補上已經不在題庫裡、但有作答紀錄的字
+    const seen = new Set(), rows = [];
+    bank.items.forEach(it => { if (seen.has(it.key)) return; seen.add(it.key); rows.push({key: it.key, it, p: prog[it.key], lv: lvOf(prog[it.key])}); });
+    j.words.forEach(p => { if (!seen.has(p.key)){ seen.add(p.key); rows.push({key: p.key, it: null, p, lv: lvOf(p)}); } });
+    tStu = {rows, sessions: j.sessions || [], wrongAns: j.wrongAns || {}};
+    renderStudent(tStu.rows.some(r => r.lv === 'wrong') ? 'wrong' : 'sessions');
   } catch(e){ $('#tDetailList').innerHTML = `<li class="muted">讀取失敗：${h(e.message)}</li>`; }
+}
+function renderStudent(lv){
+  tLv = lv;
+  const cnt = k => tStu.rows.filter(r => r.lv === k).length;
+  const tabs = [['wrong', '🔴 錯題'], ['learning', '🔵 練習中'], ['mastered', '🟢 熟練'], ['new', '⚪ 還沒考'], ['sessions', '📊 考試紀錄']];
+  $('#tLv').innerHTML = tabs.map(([k, name]) => `<button type="button" class="lvbtn" data-lv="${k}" style="${k === lv ? 'border-color:var(--accent);background:var(--accent-soft);font-weight:700' : ''}">${name} <b>${k === 'sessions' ? tStu.sessions.length : cnt(k)}</b></button>`).join('');
+  $('#tLv').querySelectorAll('.lvbtn').forEach(b => b.addEventListener('click', () => renderStudent(b.dataset.lv)));
+  if (lv === 'sessions'){
+    $('#tDetailList').innerHTML = historyRows(tStu.sessions.slice(0, 20)) || '<li class="muted">還沒有考試紀錄</li>';
+    return;
+  }
+  const list = tStu.rows.filter(r => r.lv === lv);
+  if (lv === 'wrong') list.sort((a, b) => (b.p.w - a.p.w) || (a.p.s - b.p.s));
+  if (lv !== 'new') list.sort((a, b) => lv === 'wrong' ? 0 : (b.p.t - a.p.t));
+  $('#tDetailList').innerHTML = list.map(r => {
+    const it = r.it, p = r.p;
+    const word = it ? (it.clozeOnly ? it.cloze : it.en) : r.key;
+    const hd = it && it.head ? headOf(it) : null;
+    const ans = (tStu.wrongAns[(it ? it.en : r.key).toLowerCase()] || []);
+    return `<li><span class="grow"><b>${h(word)}</b> <span class="muted">${h(it ? it.zh : '')}</span>${hd ? ` <span class="small muted">（${h(hd.en)}）</span>` : ''}
+      ${it && it.group ? `<br><span class="small muted">${h(it.group)}</span>` : (it ? '' : '<br><span class="small muted">（已不在題庫）</span>')}
+      ${p ? `<br><span class="small muted">對 ${p.r} · 錯 ${p.w} · 連對 ${p.s} · ${fmtTime(p.t)}${lv === 'wrong' ? ` · 還要連續答對 <b>${Math.max(1, required(p.w) - p.s)}</b> 次` : ''}</span>` : ''}
+      ${lv === 'wrong' && ans.length ? `<br><span class="small" style="color:var(--bad)">最近答錯：${ans.map(a => (a.a ? `「${h(a.a)}」` : '（沒作答）') + `<span class="muted">${h(a.type)}</span>`).join('、')}</span>` : ''}
+      ${lv === 'wrong' && it && it.sentence ? `<br><span class="small">${clozeHTML(it.sentence, true)}</span>` : ''}</span></li>`;
+  }).join('') || `<li class="muted">${lv === 'wrong' ? '錯題本是空的 🎉' : '沒有'}</li>`;
+}
+// 點「全班最常錯的字」：看是哪些學生還在錯題本裡
+function openWho(x){
+  const it = bank.items.find(i => i.key === x.key || i.en.toLowerCase() === x.key);
+  $('#lvTitle').textContent = `📖 ${x.key}`;
+  $('#lvDesc').textContent = (it ? it.zh + '　' : '') + `全班累計錯 ${x.w} 次，目前 ${x.n} 位學生的錯題本裡有這個字`;
+  $('#lvList').innerHTML = (x.who || []).map(n => `<li><span>👤 ${h(n)}</span><span class="badge b-wrong">錯題</span></li>`).join('') || '<li class="muted">目前沒有學生的錯題本裡有這個字（都已經練起來了）</li>';
+  $('#lvGo').hidden = true;
+  $('#lvModal').hidden = false;
 }
 $('#teacherBtn').addEventListener('click', () => show('teacher'));
 $('#teacherBack').addEventListener('click', () => { renderHome(); show('home'); });
