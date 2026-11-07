@@ -35,7 +35,7 @@ function ss_() {
 
 var SHEETS = {
   users: { name: '帳號',     headers: ['帳號', '密碼', '姓名', '班級', '身分'] },
-  bank:  { name: '題庫',     headers: ['單元', '打勾', '英文', '中文', '例句', '例句中文', '所屬單字'] },
+  bank:  { name: '題庫',     headers: ['單元', '打勾', '英文', '中文', '例句', '例句中文', '所屬單字', '指定學生'] },
   log:   { name: '作答紀錄', headers: ['時間', '帳號', '姓名', '班級', '單字', '題型', '對錯', '學生答案', '正確答案', '紀錄ID', '測驗ID'] },
   stats: { name: '單字狀態', headers: ['帳號', '單字', '答對次數', '答錯次數', '連續答對', '最後作答'] }
 };
@@ -124,10 +124,9 @@ function doPost(e) {
     var req = JSON.parse(e.postData.contents || '{}');
     var action = req.action;
     if (action === 'ping') return json_({ ok: true });
-    if (action === 'getBank') return json_(getBank_());
-
     var u = auth_(req.user, req.pass);
     if (!u) return json_({ ok: false, error: '帳號或密碼錯誤' });
+    if (action === 'getBank') return json_(getBank_(u));   // 要登入；學生只拿得到指定給自己（或全部學生）的單元
 
     switch (action) {
       case 'login':       return json_({ ok: true, user: { id: u.id, name: u.name, cls: u.cls, role: u.role } });
@@ -139,6 +138,8 @@ function doPost(e) {
     if (u.role !== '老師') return json_({ ok: false, error: '只有老師可以使用這個功能' });
     switch (action) {
       case 'overview':      return json_(overview_());
+      case 'listStudents':  return json_({ ok: true, students: rows_(SHEETS.users).filter(function (r) { return String(r[0]).trim() && String(r[4] || '').indexOf('老師') < 0; })
+                              .map(function (r) { return { id: String(r[0]).trim().toLowerCase(), name: String(r[2] || r[0]), cls: String(r[3] || '') }; }) });
       case 'studentDetail': {
         var sid = String(req.id || '').toLowerCase();
         return json_({ ok: true, words: getProgressList_(sid), sessions: getHistory_(sid).slice(0, 20), wrongAns: getWrongAnswers_(sid) });
@@ -203,7 +204,10 @@ function auth_(user, pass) {
 }
 
 /* ---------------- 題庫 ---------------- */
-function getBank_() {
+function whoList_(v) {
+  return String(v || '').toLowerCase().split(/[\s,，、;；]+/).map(function (x) { return x.trim(); }).filter(String);
+}
+function getBank_(u) {
   var rows = rows_(SHEETS.bank);
   // 題庫是空的：寫入預設題庫（只做一次，老師之後清空也不會再自動寫入）
   if (!rows.length && typeof SEED_BANK !== 'undefined' && SEED_BANK.length) {
@@ -214,12 +218,19 @@ function getBank_() {
       rows = rows_(SHEETS.bank);
     }
   }
+  var teacher = u && u.role === '老師';
   var lines = [], group = null;
   rows.forEach(function (r) {
     var en = String(r[2] || '').trim();
     if (!en) return;
+    var who = whoList_(r[7]);
+    if (!teacher && who.length && who.indexOf(u.id) < 0) return;   // 不是指定給這位學生的單元
     var g = String(r[0] || '').trim();
-    if (g !== group) { group = g; if (g) lines.push('', '# ' + g); }
+    if (g !== group) {
+      group = g;
+      // 老師看得到每個單元指定給誰（# Unit 3 @s001 @s002）；學生只看到單元名稱
+      if (g) lines.push('', '# ' + g + (teacher && who.length ? ' @' + who.join(' @') : ''));
+    }
     var star = /^(✓|✔|v|y|yes|true|1|是|★|\*)$/i.test(String(r[1]).trim()) ? '✓ ' : '';
     var parts = [en, r[3], r[4], r[5]].map(function (x) { return String(x || '').replace(/\|/g, '／').trim(); });
     while (parts.length > 1 && !parts[parts.length - 1]) parts.pop();
@@ -235,11 +246,13 @@ function saveBank_(items) {
   try {
     var sh = sheet_(SHEETS.bank);
     if (sh.getRange(1, 7).getValue() !== '所屬單字') sh.getRange(1, 7).setValue('所屬單字').setFontWeight('bold').setBackground('#e8efff');
-    if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 7).clearContent();
+    if (sh.getRange(1, 8).getValue() !== '指定學生') sh.getRange(1, 8).setValue('指定學生').setFontWeight('bold').setBackground('#e8efff');
+    if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, 8).clearContent();
     var rows = items.slice(0, 3000).map(function (x) {
-      return [safe_(x.group), x.star ? '✓' : '', safe_(x.en), safe_(x.zh), safe_(x.sentence), safe_(x.sentZh), safe_(x.head)];
+      return [safe_(x.group), x.star ? '✓' : '', safe_(x.en), safe_(x.zh), safe_(x.sentence), safe_(x.sentZh), safe_(x.head),
+              whoList_(Array.isArray(x.who) ? x.who.join(',') : x.who).join(',')];
     });
-    if (rows.length) sh.getRange(2, 1, rows.length, 7).setValues(rows);
+    if (rows.length) sh.getRange(2, 1, rows.length, 8).setValues(rows);
     return { ok: true, saved: rows.length };
   } finally { lock.releaseLock(); }
 }
