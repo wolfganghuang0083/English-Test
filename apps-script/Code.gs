@@ -139,7 +139,9 @@ function doPost(e) {
     switch (action) {
       case 'overview':      return json_(overview_());
       case 'listStudents':  return json_({ ok: true, students: rows_(SHEETS.users).filter(function (r) { return String(r[0]).trim() && String(r[4] || '').indexOf('老師') < 0; })
-                              .map(function (r) { return { id: String(r[0]).trim().toLowerCase(), name: String(r[2] || r[0]), cls: String(r[3] || '') }; }) });
+                              .map(function (r) { return { id: String(r[0]).trim().toLowerCase(), name: String(r[2] || r[0]), cls: String(r[3] || ''), pass: String(r[1] || '') }; }) });
+      case 'saveStudent':   return json_(saveStudent_(req));
+      case 'deleteStudent': return json_(deleteStudent_(req.id));
       case 'studentDetail': {
         var sid = String(req.id || '').toLowerCase();
         return json_({ ok: true, words: getProgressList_(sid), sessions: getHistory_(sid).slice(0, 20), wrongAns: getWrongAnswers_(sid) });
@@ -201,6 +203,42 @@ function auth_(user, pass) {
     }
   }
   return null;
+}
+
+/* ---------------- 學生帳號管理（老師在網頁後台新增／修改／刪除） ---------------- */
+function saveStudent_(req) {
+  var id = String(req.id || '').trim().toLowerCase();
+  // 注意：req.pass 是老師自己登入用的密碼；學生的新密碼放在 req.newPass
+  var pass = String(req.newPass || '').trim(), name = String(req.name || '').trim(), cls = String(req.cls || '').trim();
+  if (!/^[a-z0-9][a-z0-9_.\-]{1,19}$/.test(id)) return { ok: false, error: '帳號要 2～20 個英文字母或數字（可用 _ . -）' };
+  if (pass.length < 4 || pass.length > 30) return { ok: false, error: '密碼要 4～30 個字' };
+  if (!name) return { ok: false, error: '請輸入學生姓名' };
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    var sh = sheet_(SHEETS.users), rows = rows_(SHEETS.users), at = -1;
+    for (var i = 0; i < rows.length; i++) if (String(rows[i][0]).trim().toLowerCase() === id) { at = i; break; }
+    if (at >= 0 && String(rows[at][4] || '').indexOf('老師') >= 0) return { ok: false, error: '這個帳號是老師帳號，不能在這裡修改' };
+    if (at >= 0 && !req.edit) return { ok: false, error: '帳號「' + id + '」已經有人用了，請換一個' };
+    if (at < 0 && req.edit) return { ok: false, error: '找不到這個學生帳號' };
+    var row = at >= 0 ? at + 2 : sh.getLastRow() + 1;
+    sh.getRange(row, 1, 1, 2).setNumberFormat('@');   // 帳號、密碼當文字（0012 不會變 12）
+    sh.getRange(row, 1, 1, 5).setValues([[id, pass, safe_(name), safe_(cls), '學生']]);
+    return { ok: true, student: { id: id, name: name, cls: cls, pass: pass } };
+  } finally { lock.releaseLock(); }
+}
+function deleteStudent_(id) {
+  id = String(id || '').trim().toLowerCase();
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    var sh = sheet_(SHEETS.users), rows = rows_(SHEETS.users);
+    for (var i = 0; i < rows.length; i++) {
+      if (String(rows[i][0]).trim().toLowerCase() !== id) continue;
+      if (String(rows[i][4] || '').indexOf('老師') >= 0) return { ok: false, error: '不能刪除老師帳號' };
+      sh.deleteRow(i + 2);   // 只刪帳號；作答紀錄、單字狀態都保留在試算表
+      return { ok: true };
+    }
+    return { ok: false, error: '找不到這個學生帳號' };
+  } finally { lock.releaseLock(); }
 }
 
 /* ---------------- 題庫 ---------------- */

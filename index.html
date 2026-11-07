@@ -221,6 +221,11 @@ s{color:var(--bad)}
     <div class="row"><select id="clsFilter" class="grow"></select><button class="soft" id="teacherRefresh">重新整理</button></div>
     <div class="stat" id="tSummary" style="margin-bottom:0"></div>
   </div>
+  <div class="card" id="stuCard">
+    <div class="row" style="justify-content:space-between;margin-bottom:6px"><h2 style="margin:0">👤 學生帳號</h2><button class="primary" id="stuAdd" style="min-height:40px">➕ 新增學生</button></div>
+    <ul class="plist" id="stuList" style="max-height:none"></ul>
+    <p class="small muted" style="margin:8px 0 0">刪除帳號只會讓他不能登入；作答紀錄仍保留在試算表。</p>
+  </div>
   <div class="card"><h2>全班最常錯的字（點字看是哪些學生）</h2><div class="wchips" id="tTop"></div></div>
   <div class="card" id="tDetail" hidden>
     <div class="row" style="justify-content:space-between"><h2 id="tDetailName" style="margin:0"></h2><button class="ghost" id="tDetailClose">✕</button></div>
@@ -228,7 +233,7 @@ s{color:var(--bad)}
     <ul class="plist" id="tDetailList" style="max-height:none"></ul>
   </div>
   <div class="card"><h2>學生（點一下看每個字的狀況）</h2><ul class="rlist" id="tList"></ul></div>
-  <p class="small muted">完整的每一題作答紀錄在 Google 試算表的「作答紀錄」工作表。要新增學生，在「帳號」工作表加一列即可。</p>
+  <p class="small muted">完整的每一題作答紀錄在 Google 試算表的「作答紀錄」工作表。</p>
 </section>
 
 <!-- ========== HOME ========== -->
@@ -431,6 +436,26 @@ movie/film | 電影</pre>
   </div>
 </div>
 
+<!-- ========== STUDENT ACCOUNT DIALOG ========== -->
+<div class="modal" id="stuModal" hidden>
+  <div class="sheet">
+    <div id="stuForm">
+      <h2 style="margin:0 0 4px;font-size:19px" id="stuTitle">➕ 新增學生</h2>
+      <div class="field"><div class="lbl">姓名</div><input type="text" id="stuName" placeholder="例如 王小明" autocomplete="off"></div>
+      <div class="field"><div class="lbl">班級／備註（可不填）</div><input type="text" id="stuCls" placeholder="例如 七年一班、哥哥" autocomplete="off"></div>
+      <div class="field"><div class="lbl">帳號（登入用，英文或數字）</div><input type="text" id="stuId" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off"></div>
+      <div class="field"><div class="lbl">密碼</div><div class="row"><input type="text" id="stuPass" class="grow" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off"><button class="ghost" id="stuGen">🎲 換一組</button></div></div>
+      <div class="row" style="margin-top:14px"><button class="grow" id="stuCancel">取消</button><button class="primary grow" id="stuSave">儲存</button></div>
+    </div>
+    <div id="stuDone" hidden>
+      <h2 style="margin:0 0 8px;font-size:19px">✅ 帳號建立好了</h2>
+      <p class="small muted" style="margin:0 0 8px">把下面的登入資訊傳給孩子（或截圖）：</p>
+      <pre id="stuInfo" style="background:var(--bg);border-radius:12px;padding:12px;white-space:pre-wrap;word-break:break-all;font-size:15px;margin:0"></pre>
+      <div class="row" style="margin-top:14px"><button class="soft grow" id="stuCopy">📋 複製登入資訊</button><button class="primary grow" id="stuDoneOk">完成</button></div>
+    </div>
+  </div>
+</div>
+
 <!-- ========== ASSIGN DIALOG ========== -->
 <div class="modal" id="assignModal" hidden>
   <div class="sheet">
@@ -521,7 +546,7 @@ movie/film | 電影</pre>
 <div class="toast" id="toast"></div>
 <div id="updateBar" hidden style="position:fixed;top:0;left:0;right:0;z-index:9;background:var(--accent);color:var(--accent-ink);text-align:center;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:700;cursor:pointer">🔄 有新版本，點這裡更新</div>
 
-<script>window.APP_VERSION = '2026-11-07.1';</script>
+<script>window.APP_VERSION = '2026-11-07.2';</script>
 <script src="config.js"></script>
 <script>
 'use strict';
@@ -1203,6 +1228,83 @@ function openWho(x){
   $('#lvGo').hidden = true;
   $('#lvModal').hidden = false;
 }
+/* ---------- 學生帳號管理 ---------- */
+const appUrl = () => location.origin + location.pathname + '?openExternalBrowser=1';
+const loginInfo = st => `英文單字小考\n網址：${appUrl()}\n帳號：${st.id}\n密碼：${st.pass}\n（請用 Safari 或 Chrome 開啟）`;
+async function renderStudentsAdmin(){
+  const box = $('#stuList');
+  box.innerHTML = '<li class="muted">載入中…</li>';
+  try { studentList = null; await getStudents(); }
+  catch(e){ box.innerHTML = `<li class="muted">讀取失敗：${h(e.message)}</li>`; return; }
+  box.innerHTML = studentList.map(st => `<li><span class="grow"><b>${h(st.name)}</b> <span class="small muted">${h(st.cls)}</span><br>
+      <span class="small">帳號 <b>${h(st.id)}</b>・密碼 <b class="pw" data-pw="${h(st.pass)}">••••</b> <button class="ghost showpw" style="min-height:26px;padding:0 6px;font-size:12px">顯示</button></span></span>
+      <span style="display:flex;flex-direction:column;gap:4px">
+        <button class="soft" data-act="info" data-id="${h(st.id)}" style="min-height:30px;padding:2px 10px;font-size:13px">📋 登入資訊</button>
+        <button class="soft" data-act="edit" data-id="${h(st.id)}" style="min-height:30px;padding:2px 10px;font-size:13px">✏️ 編輯</button>
+        <button class="ghost" data-act="del" data-id="${h(st.id)}" style="min-height:30px;padding:2px 10px;font-size:13px;color:var(--bad)">刪除</button>
+      </span></li>`).join('') || '<li class="muted">還沒有學生，按「➕ 新增學生」建立第一個帳號</li>';
+  box.querySelectorAll('.showpw').forEach(b => b.addEventListener('click', () => { const pw = b.previousElementSibling; pw.textContent = pw.dataset.pw; b.remove(); }));
+  box.querySelectorAll('button[data-act]').forEach(b => b.addEventListener('click', () => {
+    const st = studentList.find(x => x.id === b.dataset.id);
+    if (b.dataset.act === 'edit') openStudentForm(st);
+    else if (b.dataset.act === 'info') showStudentInfo(st);
+    else deleteStudent(st);
+  }));
+}
+const randPw = () => String(Math.floor(1000 + Math.random() * 9000));
+function suggestId(){
+  const ids = new Set((studentList || []).map(x => x.id));
+  let n = 1; while (ids.has('s' + String(n).padStart(3, '0'))) n++;
+  return 's' + String(n).padStart(3, '0');
+}
+let stuEdit = null;
+function openStudentForm(st){
+  stuEdit = st || null;
+  $('#stuForm').hidden = false; $('#stuDone').hidden = true;
+  $('#stuTitle').textContent = st ? `✏️ 編輯「${st.name}」` : '➕ 新增學生';
+  $('#stuName').value = st ? st.name : '';
+  $('#stuCls').value = st ? st.cls : '';
+  $('#stuId').value = st ? st.id : suggestId();
+  $('#stuId').disabled = !!st;   // 帳號建立後不能改（作答紀錄是跟著帳號記的）
+  $('#stuPass').value = st ? st.pass : randPw();
+  $('#stuModal').hidden = false;
+  if (!st) setTimeout(() => $('#stuName').focus(), 50);
+}
+function showStudentInfo(st){
+  $('#stuForm').hidden = true; $('#stuDone').hidden = false;
+  $('#stuDone h2').textContent = `🔑 ${st.name} 的登入資訊`;
+  $('#stuInfo').textContent = loginInfo(st);
+  $('#stuModal').hidden = false;
+}
+async function saveStudent(){
+  const st = {id: $('#stuId').value.trim().toLowerCase(), pass: $('#stuPass').value.trim(), name: $('#stuName').value.trim(), cls: $('#stuCls').value.trim()};
+  if (!st.name) return toast('請輸入學生姓名');
+  const btn = $('#stuSave'); btn.disabled = true; btn.textContent = '儲存中…';
+  try {
+    await api('saveStudent', {edit: !!stuEdit, id: st.id, newPass: st.pass, name: st.name, cls: st.cls});   // pass 欄位是老師自己的登入密碼，不能拿來放學生密碼
+    await renderStudentsAdmin();
+    loadTeacher();
+    if (stuEdit){ $('#stuModal').hidden = true; toast(`已更新「${st.name}」`); }
+    else { showStudentInfo(st); $('#stuDone h2').textContent = '✅ 帳號建立好了'; }
+  } catch(e){ alert('❌ ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = '儲存'; }
+}
+async function deleteStudent(st){
+  if (!confirm(`確定要刪除「${st.name}」（${st.id}）的帳號嗎？\n刪除後就不能登入；以前的作答紀錄仍保留在試算表。`)) return;
+  try { await api('deleteStudent', {id: st.id}); toast(`已刪除「${st.name}」`); await renderStudentsAdmin(); loadTeacher(); }
+  catch(e){ alert('❌ ' + e.message); }
+}
+$('#stuAdd').addEventListener('click', async () => { try { await getStudents(); } catch(e){} openStudentForm(null); });
+$('#stuGen').addEventListener('click', () => { $('#stuPass').value = randPw(); });
+$('#stuCancel').addEventListener('click', () => { $('#stuModal').hidden = true; });
+$('#stuSave').addEventListener('click', saveStudent);
+$('#stuDoneOk').addEventListener('click', () => { $('#stuModal').hidden = true; });
+$('#stuCopy').addEventListener('click', async () => {
+  const t = $('#stuInfo').textContent;
+  try { await navigator.clipboard.writeText(t); toast('已複製，可以貼到 LINE 傳給孩子'); }
+  catch(e){ prompt('複製這段登入資訊：', t); }
+});
+
 $('#teacherBtn').addEventListener('click', () => show('teacher'));
 $('#teacherBack').addEventListener('click', () => { renderHome(); show('home'); });
 $('#teacherRefresh').addEventListener('click', loadTeacher);
@@ -1424,7 +1526,7 @@ const SUB_SCREENS = ['quiz', 'bank', 'teacher', 'result', 'mine'];
 function show(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
   if (SUB_SCREENS.includes(id) && !(history.state && history.state.sub)){ try { history.pushState({sub: true}, ''); } catch(e){} }
-  if (id === 'teacher') loadTeacher();
+  if (id === 'teacher'){ loadTeacher(); renderStudentsAdmin(); }
   window.scrollTo(0, 0);
   if (id !== 'quiz'){ if (canTTS) speechSynthesis.cancel(); stopListening(); }
 }
@@ -2527,6 +2629,7 @@ window.addEventListener('popstate', () => {
   if (!$('#importModal').hidden){ $('#importModal').hidden = true; return stay(); }
   if (!$('#lvModal').hidden){ closeLv(); return stay(); }
   if (!$('#assignModal').hidden){ $('#assignModal').hidden = true; return stay(); }
+  if (!$('#stuModal').hidden){ $('#stuModal').hidden = true; return stay(); }
   if (cur === 'quiz'){ if (!quitQuiz()) stay(); return; }
   if (cur === 'bank') commitBank();
   if (SUB_SCREENS.includes(cur)){ renderHome(); show('home'); }
