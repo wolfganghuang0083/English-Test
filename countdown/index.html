@@ -3,8 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#EDF1EF" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0E1412" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="隨手倒數">
@@ -25,28 +24,18 @@
   /* Layout: one-screen phone app — header, scrolling pane, bottom tab bar.
      The timer is a 120-tick dial that goes dark tick by tick as time runs out. */
   :root {
-    --bg: #EDF1EF;
-    --surface: #FFFFFF;
-    --line: #D3DBD7;
-    --track: #D9E1DD;
-    --fg: #15201C;
-    --muted: #5E6B66;
-    --accent: #0E7A6A;
-    --accent-ink: #FFFFFF;
-    --warn: #D62839;
+    --bg: #000000;
+    --surface: #131615;
+    --line: #272C2A;
+    --track: #262B29;
+    --fg: #F2F4F3;
+    --muted: #8D9693;
+    --accent: #3FC1AC;
+    --accent-ink: #04201B;
+    --warn: #FF4D5E;
+    --alarm: #E0182D;
     --f-digits: "Chivo Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     --f-ui: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #0E1412; --surface: #17201D; --line: #27332F; --track: #223029;
-      --fg: #E4EBE8; --muted: #8E9C97; --accent: #3FC1AC; --accent-ink: #06201B; --warn: #FF5468;
-      color-scheme: dark;
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: #0E1412; --surface: #17201D; --line: #27332F; --track: #223029;
-    --fg: #E4EBE8; --muted: #8E9C97; --accent: #3FC1AC; --accent-ink: #06201B; --warn: #FF5468;
     color-scheme: dark;
   }
 
@@ -136,32 +125,41 @@
   .tk.on { stroke: var(--accent); }
   .track { fill: none; stroke: var(--track); stroke-width: 3; }
   .arc { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 150px 150px; }
-  .red .tk.on, .red .arc { stroke: var(--warn); }
-  .rainbow .track { opacity: .5; }
-  .done .tk { stroke: var(--warn); animation: flash 1s steps(1) infinite; }
   .readout { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; }
   .r-state { font-size: 13px; letter-spacing: .24em; color: var(--muted); }
   .r-time { font-family: var(--f-digits); font-weight: 300; font-size: clamp(52px, 17vw, 78px); font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1; }
   .r-time.long { font-size: clamp(38px, 12.5vw, 58px); }
   .r-sub { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .paused .r-time { animation: breathe 1.8s ease-in-out infinite; }
-  .done .r-time, .done .r-state, .red .r-time, .red .r-state { color: var(--warn); }
-  .rainbow .r-time {
-    font-weight: 400;
-    background: linear-gradient(90deg, #FF3B3B, #FF9F1A, #F5C400, #2FCB55, #19B8F0, #5468FF, #C04DFF, #FF3B3B);
-    background-size: 200% 100%;
-    -webkit-background-clip: text; background-clip: text;
-    color: transparent; -webkit-text-fill-color: transparent;
-    animation: flow 1.6s linear infinite;
-  }
-  .rainbow.paused .r-time { animation: flow 1.6s linear infinite, breathe 1.8s ease-in-out infinite; }
   .controls { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; width: 100%; max-width: 360px; }
   .ghost { height: 48px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font-size: 15px; font-weight: 500; }
   .round { width: 88px; height: 88px; border-radius: 50%; letter-spacing: .06em; }
-  .done .round { background: var(--warn); color: #fff; }
-  @keyframes flash { 50% { opacity: .25; } }
   @keyframes breathe { 50% { opacity: .35; } }
-  @keyframes flow { to { background-position: 200% 0; } }
+
+  /* Whole-screen background while timing: red in the last minute,
+     flowing rainbow in the last 39 seconds, red/black flash when time is up. */
+  html[data-fx] body { background: transparent; }
+  html[data-fx="red"] { background: var(--alarm); }
+  html[data-fx="rainbow"] {
+    background: linear-gradient(90deg, #FF2D55, #FF7A00, #F2B600, #22B14C, #00A8B5, #0A6CFF, #9B4DDB, #FF2D55);
+    background-size: 200% 100%;
+    animation: bgflow 3s linear infinite;
+  }
+  html[data-fx="done"] { background: var(--alarm); animation: alarmflash 1s steps(1) infinite; }
+  @keyframes bgflow { to { background-position: 200% 0; } }
+  @keyframes alarmflash { 50% { background: #000; } }
+  html[data-fx] .top h1, html[data-fx] .r-time, html[data-fx] .r-state, html[data-fx] .r-sub { color: #fff; }
+  html[data-fx] .mark { border-color: #fff; }
+  html[data-fx] .mark::after { background: #fff; }
+  html[data-fx] .r-time { text-shadow: 0 2px 18px rgba(0, 0, 0, .28); }
+  html[data-fx] .r-sub, html[data-fx] .r-state { text-shadow: 0 1px 6px rgba(0, 0, 0, .3); }
+  html[data-fx] .tk, html[data-fx] .track { stroke: rgba(255, 255, 255, .3); }
+  html[data-fx] .tk.on, html[data-fx] .arc { stroke: #fff; }
+  html[data-fx] .ghost, html[data-fx] .icon-btn { background: rgba(0, 0, 0, .22); border-color: rgba(255, 255, 255, .45); color: #fff; }
+  html[data-fx] .round { background: #fff; color: #111; }
+  html[data-fx] .tabs { background: transparent; border-top-color: rgba(255, 255, 255, .35); }
+  html[data-fx] .tab { color: rgba(255, 255, 255, .7); }
+  html[data-fx] .tab[aria-selected="true"] { color: #fff; }
 
   /* Landscape while timing: digits fill the screen */
   @media (orientation: landscape) and (pointer: coarse), (orientation: landscape) and (max-height: 500px) {
@@ -268,12 +266,6 @@
       <section id="v-run" class="pane run" hidden>
         <div class="dial">
           <svg viewBox="0 0 300 300" aria-hidden="true">
-            <defs>
-              <linearGradient id="rbg" gradientUnits="userSpaceOnUse" x1="26" y1="150" x2="274" y2="150">
-                <stop offset="0" stop-color="#FF3B3B"/><stop offset=".2" stop-color="#FF9F1A"/><stop offset=".38" stop-color="#F5C400"/>
-                <stop offset=".55" stop-color="#2FCB55"/><stop offset=".72" stop-color="#19B8F0"/><stop offset=".86" stop-color="#5468FF"/><stop offset="1" stop-color="#C04DFF"/>
-              </linearGradient>
-            </defs>
             <g id="ticks"></g>
             <circle class="track" cx="150" cy="150" r="124"/>
             <circle class="arc" id="arc" cx="150" cy="150" r="124"/>
@@ -494,9 +486,13 @@
     l.setAttribute("class", major ? "tk major" : "tk");
     tg.append(l); ticks.push(l);
   }
-  const arc = $("#arc"), C = 2 * Math.PI * 124, rbg = $("#rbg");
-  const still = (() => { try { return matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } })();
-  let wasRainbow = false;
+  const arc = $("#arc"), C = 2 * Math.PI * 124;
+  const appEl = $(".app"), rootEl = document.documentElement;
+  let fxMode = "";
+  function applyFx() {
+    const m = appEl.classList.contains("is-run") ? fxMode : "";
+    if ((rootEl.dataset.fx || "") !== m) { if (m) rootEl.dataset.fx = m; else delete rootEl.dataset.fx; }
+  }
   arc.style.strokeDasharray = C.toFixed(2);
 
   /* ---------- timer state ---------- */
@@ -517,24 +513,12 @@
     vRun.classList.toggle("paused", T.state === "paused");
     vRun.classList.toggle("done", T.state === "done");
     const live = T.state === "running" || T.state === "paused";
-    const rainbow = live && secs <= 39;
-    vRun.classList.toggle("red", live && secs <= 60 && !rainbow);
-    vRun.classList.toggle("rainbow", rainbow);
+    fxMode = T.state === "done" ? "done" : live && secs <= 39 ? "rainbow" : live && secs <= 60 ? "red" : "";
+    applyFx();
 
     arc.style.strokeDashoffset = (C * (1 - frac)).toFixed(2);
     const lit = Math.ceil(frac * N);
     if (lit !== lastLit) { ticks.forEach((t, i) => t.classList.toggle("on", i < lit)); lastLit = lit; }
-    if (rainbow) {
-      const shift = still ? 0 : now / 6;
-      ticks.forEach((t, i) => { t.style.stroke = i < lit ? `hsl(${((i / Math.max(lit, 1) * 330 - shift) % 360 + 360) % 360} 90% 56%)` : ""; });
-      arc.style.stroke = "url(#rbg)";
-      rbg.setAttribute("gradientTransform", `rotate(${(shift % 360).toFixed(1)} 150 150)`);
-      wasRainbow = true;
-    } else if (wasRainbow) {
-      ticks.forEach((t) => { t.style.stroke = ""; });
-      arc.style.stroke = "";
-      wasRainbow = false;
-    }
 
     tEl.classList.toggle("long", long);
     const txt = fmt(T.state === "done" ? 0 : secs, long);
@@ -555,14 +539,13 @@
   function frame() {
     if (T.state === "running" && T.endAt - Date.now() <= 0) finish();
     render();
-    if (T.state === "running" || T.state === "done" || (T.state === "paused" && wasRainbow)) raf = requestAnimationFrame(frame);
+    if (T.state === "running" || T.state === "done") raf = requestAnimationFrame(frame);
   }
   function loop() { cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); }
   // Background check: rAF stops in hidden tabs, so this catches the finish.
   setInterval(() => { if (T.state === "running" && T.endAt - Date.now() <= 0) { finish(); render(); } }, 250);
 
-  const appEl = $(".app");
-  const paintMode = () => appEl.classList.toggle("is-run", !vRun.hidden && !$("#tab-timer").hidden);
+  const paintMode = () => { appEl.classList.toggle("is-run", !vRun.hidden && !$("#tab-timer").hidden); applyFx(); };
   function showRun() { vSetup.hidden = true; vRun.hidden = false; lastLit = -1; paintMode(); render(); loop(); }
   function showSetup() { vRun.hidden = true; vSetup.hidden = false; paintMode(); requestAnimationFrame(syncWheels); document.title = APP; }
 
@@ -572,7 +555,7 @@
     Object.assign(T, { state: "running", total: ms, endAt: Date.now() + ms, remaining: ms, doneAt: 0 });
     lastTick = -1; saveT(); lockOn(); showRun();
   }
-  function pause() { T.remaining = Math.max(0, T.endAt - Date.now()); T.state = "paused"; saveT(); lockOff(); render(); loop(); }
+  function pause() { T.remaining = Math.max(0, T.endAt - Date.now()); T.state = "paused"; saveT(); lockOff(); render(); }
   function resume() { audio(); T.endAt = Date.now() + T.remaining; T.state = "running"; saveT(); lockOn(); loop(); }
   function finish() { T.state = "done"; T.doneAt = T.endAt; T.remaining = 0; saveT(); lockOff(); startAlarm(); }
   function reset() { stopAlarm(); cancelAnimationFrame(raf); T.state = "idle"; saveT(); lockOff(); showSetup(); }
