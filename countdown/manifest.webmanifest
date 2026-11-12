@@ -1,0 +1,9 @@
+{
+  "name": "隨手倒數",
+  "short_name": "倒數",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0E1412",
+  "theme_color": "#0E7A6A",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

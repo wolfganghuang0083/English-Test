@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EDF1EF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1412" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="隨手倒數">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<style>
+  :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  [hidden] { display: none !important; }
+</style>
+<!--APP-HEAD-->
+<title>隨手倒數</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@300;400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+  /* Layout: one-screen phone app — header, scrolling pane, bottom tab bar.
+     The timer is a 120-tick dial that goes dark tick by tick as time runs out. */
+  :root {
+    --bg: #EDF1EF;
+    --surface: #FFFFFF;
+    --line: #D3DBD7;
+    --track: #D9E1DD;
+    --fg: #15201C;
+    --muted: #5E6B66;
+    --accent: #0E7A6A;
+    --accent-ink: #FFFFFF;
+    --warn: #C8461B;
+    --f-digits: "Chivo Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --f-ui: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0E1412; --surface: #17201D; --line: #27332F; --track: #223029;
+      --fg: #E4EBE8; --muted: #8E9C97; --accent: #3FC1AC; --accent-ink: #06201B; --warn: #FF7A45;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0E1412; --surface: #17201D; --line: #27332F; --track: #223029;
+    --fg: #E4EBE8; --muted: #8E9C97; --accent: #3FC1AC; --accent-ink: #06201B; --warn: #FF7A45;
+    color-scheme: dark;
+  }
+
+  html { box-sizing: border-box; height: 100%; }
+  *, *::before, *::after { box-sizing: inherit; }
+  body {
+    height: 100%; margin: 0; overflow: hidden;
+    background: var(--bg); color: var(--fg);
+    font-family: var(--f-ui); font-size: 15px; line-height: 1.5;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  button { font-family: inherit; cursor: pointer; touch-action: manipulation; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .app { height: 100%; display: flex; flex-direction: column; }
+  .band-in {
+    max-width: 520px; margin: 0 auto; width: 100%;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  /* Header */
+  .top .band-in { display: flex; align-items: center; justify-content: space-between; padding-block: 12px 4px; }
+  .top h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: .04em; display: flex; align-items: center; gap: 10px; }
+  .mark { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--accent); position: relative; }
+  .mark::after { content: ""; position: absolute; left: 50%; top: 2px; width: 2px; height: 6px; margin-left: -1px; background: var(--accent); border-radius: 1px; }
+  .icon-btn {
+    width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--fg); display: grid; place-items: center;
+  }
+  .icon-btn[aria-pressed="false"] { color: var(--muted); }
+
+  main { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .pane { min-height: 100%; display: flex; flex-direction: column; gap: 22px; padding-block: 12px 28px; }
+
+  .label { font-size: 12px; font-weight: 500; letter-spacing: .14em; color: var(--muted); margin: 0; }
+
+  /* Timer — setup */
+  .setup { justify-content: center; }
+  .picker { position: relative; display: flex; justify-content: center; align-items: center; gap: 2px; height: 220px; }
+  .picker::before {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 50px; transform: translateY(-50%);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  }
+  .col { position: relative; z-index: 1; display: flex; align-items: center; border-radius: 12px; }
+  .col:has(.wheel:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .wheel {
+    height: 220px; width: 70px; overflow-y: scroll; padding-block: 88px;
+    scroll-snap-type: y mandatory; overscroll-behavior: contain;
+    scrollbar-width: none; outline: none;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 36%, #000 64%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 36%, #000 64%, transparent 100%);
+  }
+  .wheel::-webkit-scrollbar { display: none; }
+  .wi {
+    height: 44px; line-height: 44px; text-align: center; scroll-snap-align: center;
+    font-family: var(--f-digits); font-size: 30px; font-weight: 300; color: var(--muted);
+    font-variant-numeric: tabular-nums; user-select: none; -webkit-user-select: none; cursor: pointer;
+  }
+  .wi.sel { color: var(--fg); font-weight: 500; }
+  .unit { font-size: 13px; color: var(--muted); width: 16px; }
+  .colon { position: relative; z-index: 1; font-family: var(--f-digits); font-size: 26px; color: var(--muted); padding-bottom: 4px; }
+
+  .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .preset {
+    height: 46px; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--fg);
+    font-size: 14px; display: flex; align-items: baseline; justify-content: center; gap: 3px;
+  }
+  .preset b { font-family: var(--f-digits); font-size: 18px; font-weight: 500; }
+  .preset:active { background: var(--surface); }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+
+  .primary {
+    height: 56px; border-radius: 16px; border: 0; background: var(--accent); color: var(--accent-ink);
+    font-size: 17px; font-weight: 700; letter-spacing: .1em;
+  }
+  .primary:disabled { opacity: .35; cursor: default; }
+  .primary:not(:disabled):active { filter: brightness(.92); }
+
+  /* Timer — running */
+  .run { align-items: center; justify-content: center; gap: 28px; }
+  .dial { position: relative; width: min(84vw, 340px); max-width: 100%; aspect-ratio: 1; }
+  .dial svg { width: 100%; height: 100%; display: block; }
+  .tk { stroke: var(--track); stroke-width: 2.2; stroke-linecap: round; }
+  .tk.major { stroke-width: 3.2; }
+  .tk.on { stroke: var(--accent); }
+  .track { fill: none; stroke: var(--track); stroke-width: 3; }
+  .arc { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 150px 150px; }
+  .final .tk.on, .final .arc { stroke: var(--warn); }
+  .done .tk { stroke: var(--warn); animation: flash 1s steps(1) infinite; }
+  .readout { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; }
+  .r-state { font-size: 13px; letter-spacing: .24em; color: var(--muted); }
+  .r-time { font-family: var(--f-digits); font-weight: 300; font-size: clamp(52px, 17vw, 78px); font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1; }
+  .r-time.long { font-size: clamp(38px, 12.5vw, 58px); }
+  .r-sub { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .paused .r-time { animation: breathe 1.8s ease-in-out infinite; }
+  .done .r-time, .done .r-state, .final .r-time { color: var(--warn); }
+  .controls { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; width: 100%; max-width: 360px; }
+  .ghost { height: 48px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); font-size: 15px; font-weight: 500; }
+  .round { width: 88px; height: 88px; border-radius: 50%; letter-spacing: .06em; }
+  .done .round { background: var(--warn); color: #fff; }
+  @keyframes flash { 50% { opacity: .25; } }
+  @keyframes breathe { 50% { opacity: .35; } }
+
+  /* Countdown days */
+  .hero { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .hero .eyebrow { font-size: 12px; letter-spacing: .16em; color: var(--accent); font-weight: 700; margin: 0; }
+  .hero h2 { margin: 0; font-size: 24px; line-height: 1.3; text-wrap: balance; overflow-wrap: anywhere; }
+  .hero .when { color: var(--muted); font-size: 14px; margin: -8px 0 0; font-variant-numeric: tabular-nums; }
+  .units { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .u { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-block: 10px; border-radius: 12px; background: var(--bg); min-width: 0; }
+  .u b { font-family: var(--f-digits); font-size: clamp(22px, 7.4vw, 32px); font-weight: 400; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .u span { font-size: 12px; color: var(--muted); }
+  .hero.empty p { margin: 0; color: var(--muted); }
+
+  .ev-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+  .ev { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding-block: 12px; border-bottom: 1px solid var(--line); }
+  .ev-main { min-width: 0; }
+  .ev-name { font-weight: 500; font-size: 16px; overflow-wrap: anywhere; }
+  .ev-date { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ev-days { text-align: right; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .ev-days b { font-family: var(--f-digits); font-size: 22px; color: var(--fg); font-weight: 500; margin-right: 3px; font-variant-numeric: tabular-nums; }
+  .ev.today .ev-days b { color: var(--accent); }
+  .ev.past .ev-name, .ev.past .ev-days b { color: var(--muted); }
+  .ev-del { min-width: 36px; height: 36px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; }
+  .ev-del.armed { color: var(--warn); border-color: var(--warn); padding: 0 10px; font-size: 13px; font-weight: 500; }
+  .chip { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); margin-left: 6px; font-weight: 400; vertical-align: 2px; }
+  .ev-none { color: var(--muted); padding-block: 12px; margin: 0; }
+
+  .ev-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 16px; }
+  .ev-form .full { grid-column: 1 / -1; }
+  .fld { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); min-width: 0; }
+  .fld input {
+    height: 46px; width: 100%; min-width: 0; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--fg); padding: 0 12px; font: 16px var(--f-ui); -webkit-appearance: none; appearance: none;
+  }
+
+  /* Tab bar */
+  .tabs { border-top: 1px solid var(--line); background: var(--bg); }
+  .tabs .band-in { display: grid; grid-template-columns: 1fr 1fr; }
+  .tab { display: flex; flex-direction: column; align-items: center; gap: 2px; padding-block: 8px 6px; background: none; border: 0; color: var(--muted); font-size: 12px; font-weight: 500; }
+  .tab[aria-selected="true"] { color: var(--accent); }
+
+  .toast {
+    position: fixed; left: 50%; transform: translateX(-50%); z-index: 20;
+    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    background: var(--fg); color: var(--bg); padding: 8px 16px; border-radius: 999px; font-size: 14px;
+    max-width: calc(100% - 32px); text-align: center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+  @media (max-height: 620px) {
+    .picker, .wheel { height: 176px; }
+    .wheel { padding-block: 66px; }
+    .pane { gap: 16px; }
+  }
+</style>
+<!--/APP-HEAD-->
+</head>
+<body>
+<!--APP-BODY-->
+<div class="app">
+  <header class="top">
+    <div class="band-in">
+      <h1><span class="mark" aria-hidden="true"></span>隨手倒數</h1>
+      <button class="icon-btn" id="btn-sound" aria-pressed="true" aria-label="提示音">
+        <svg id="ico-sound" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9.5a6 6 0 0 1 12 0c0 5 2 6.5 2 6.5H4s2-1.5 2-6.5Z"/><path d="M10 19.5a2.2 2.2 0 0 0 4 0"/><path class="slash" d="M3 3l18 18" hidden/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Timer tab -->
+    <div id="tab-timer" class="band-in" role="tabpanel" aria-labelledby="t-timer">
+      <section id="v-setup" class="pane setup">
+        <div class="picker" role="group" aria-label="設定倒數時間">
+          <div class="col"><div class="wheel" id="wh-h" tabindex="0" role="spinbutton" aria-label="小時"></div><span class="unit">時</span></div>
+          <span class="colon" aria-hidden="true">:</span>
+          <div class="col"><div class="wheel" id="wh-m" tabindex="0" role="spinbutton" aria-label="分鐘"></div><span class="unit">分</span></div>
+          <span class="colon" aria-hidden="true">:</span>
+          <div class="col"><div class="wheel" id="wh-s" tabindex="0" role="spinbutton" aria-label="秒"></div><span class="unit">秒</span></div>
+        </div>
+        <div class="stack">
+          <p class="label">快速開始</p>
+          <div class="presets" id="presets"></div>
+        </div>
+        <button class="primary" id="btn-start">開始</button>
+      </section>
+
+      <section id="v-run" class="pane run" hidden>
+        <div class="dial">
+          <svg viewBox="0 0 300 300" aria-hidden="true">
+            <g id="ticks"></g>
+            <circle class="track" cx="150" cy="150" r="124"/>
+            <circle class="arc" id="arc" cx="150" cy="150" r="124"/>
+          </svg>
+          <div class="readout" aria-live="off">
+            <div class="r-state" id="r-state">剩餘</div>
+            <div class="r-time" id="r-time">05:00</div>
+            <div class="r-sub" id="r-sub"></div>
+          </div>
+        </div>
+        <div class="controls">
+          <button class="ghost" id="btn-reset">重設</button>
+          <button class="primary round" id="btn-pause">暫停</button>
+          <button class="ghost" id="btn-plus">+1 分</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Countdown days tab -->
+    <div id="tab-events" class="band-in" role="tabpanel" aria-labelledby="t-events" hidden>
+      <div class="pane">
+        <div id="ev-hero"></div>
+        <div class="stack">
+          <p class="label">全部日子</p>
+          <ul class="ev-list" id="ev-list"></ul>
+        </div>
+        <form class="ev-form" id="ev-form" autocomplete="off">
+          <p class="label full">新增倒數日</p>
+          <label class="fld full">名稱<input id="ev-name" name="name" maxlength="30" required placeholder="例如：期末考、生日、旅行出發"></label>
+          <label class="fld">日期<input id="ev-date" name="date" type="date" required></label>
+          <label class="fld">時間（可不填）<input id="ev-time" name="time" type="time"></label>
+          <button class="primary full" type="submit">新增</button>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <nav class="tabs" role="tablist" aria-label="功能">
+    <div class="band-in">
+      <button class="tab" id="t-timer" role="tab" aria-controls="tab-timer" aria-selected="true" data-tab="timer">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.5M10 2.5h4M18.5 6l1.5-1.5"/></svg>
+        計時器
+      </button>
+      <button class="tab" id="t-events" role="tab" aria-controls="tab-events" aria-selected="false" data-tab="events">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 2.8V6.5M16 2.8V6.5"/></svg>
+        倒數日
+      </button>
+    </div>
+  </nav>
+  <div class="toast" id="toast" role="status" hidden></div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (s) => document.querySelector(s);
+  const pad = (n) => String(n).padStart(2, "0");
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  };
+  const APP = "隨手倒數";
+
+  /* ---------- toast ---------- */
+  let toastT = 0;
+  function toast(msg) {
+    const el = $("#toast"); el.textContent = msg; el.hidden = false;
+    clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; }, 2200);
+  }
+
+  /* ---------- sound ---------- */
+  let soundOn = store.get("cd.sound", true);
+  let ac = null;
+  function audio() {
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; } }
+    if (ac.state === "suspended") ac.resume().catch(() => {});
+    return ac;
+  }
+  function tone(freq, at, dur, vol) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = "sine"; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(g); g.connect(ac.destination);
+    o.start(at); o.stop(at + dur + 0.03);
+  }
+  function tick() { if (soundOn && audio()) tone(1320, ac.currentTime, 0.07, 0.12); }
+  function chime() { if (soundOn && audio()) { const t = ac.currentTime; [0, 0.16, 0.32].forEach((d) => tone(988, t + d, 0.12, 0.3)); } }
+  let alarmI = 0, alarmT = 0;
+  function startAlarm() {
+    stopAlarm(); chime();
+    alarmI = setInterval(chime, 1100);
+    alarmT = setTimeout(stopAlarm, 60000);
+    try { navigator.vibrate && navigator.vibrate([300, 150, 300, 150, 300]); } catch {}
+  }
+  function stopAlarm() {
+    clearInterval(alarmI); clearTimeout(alarmT); alarmI = 0;
+    try { navigator.vibrate && navigator.vibrate(0); } catch {}
+  }
+  function paintSound() {
+    $("#btn-sound").setAttribute("aria-pressed", String(soundOn));
+    $("#ico-sound .slash").hidden = soundOn;
+  }
+  $("#btn-sound").addEventListener("click", () => {
+    soundOn = !soundOn; store.set("cd.sound", soundOn); paintSound();
+    if (soundOn) { audio(); tick(); } else stopAlarm();
+    toast(soundOn ? "提示音已開啟" : "提示音已關閉");
+  });
+  paintSound();
+
+  /* ---------- screen wake lock ---------- */
+  let wl = null;
+  async function lockOn() {
+    try { if ("wakeLock" in navigator && !wl) { wl = await navigator.wakeLock.request("screen"); wl.addEventListener("release", () => { wl = null; }); } } catch { wl = null; }
+  }
+  function lockOff() { try { wl && wl.release(); } catch {} wl = null; }
+
+  /* ---------- formatting ---------- */
+  function fmt(sec, long) {
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return long ? `${h}:${pad(m)}:${pad(s)}` : `${pad(h * 60 + m)}:${pad(s)}`;
+  }
+  function fmtDur(ms) {
+    const t = Math.round(ms / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+    const out = [];
+    if (h) out.push(`${h} 小時`);
+    if (m) out.push(`${m} 分`);
+    if (s || !out.length) out.push(`${s} 秒`);
+    return out.join(" ");
+  }
+  const clock = (ts) => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+
+  /* ---------- wheels ---------- */
+  const IH = 44;
+  let pick = Object.assign({ h: 0, m: 5, s: 0 }, store.get("cd.pick", {}));
+  const wheels = {
+    h: { el: $("#wh-h"), max: 23, unit: "小時" },
+    m: { el: $("#wh-m"), max: 59, unit: "分" },
+    s: { el: $("#wh-s"), max: 59, unit: "秒" },
+  };
+  const pickMs = () => ((pick.h * 60 + pick.m) * 60 + pick.s) * 1000;
+  function paintStart() {
+    const ms = pickMs(), b = $("#btn-start");
+    b.disabled = ms === 0;
+    b.textContent = ms === 0 ? "先選時間" : `開始 · ${fmtDur(ms)}`;
+  }
+  function markWheel(k) {
+    const w = wheels[k];
+    w.items.forEach((it, i) => it.classList.toggle("sel", i === pick[k]));
+    w.el.setAttribute("aria-valuenow", pick[k]);
+    w.el.setAttribute("aria-valuetext", `${pick[k]} ${w.unit}`);
+  }
+  function setPick(k, v, smooth) {
+    pick[k] = v; markWheel(k); store.set("cd.pick", pick); paintStart();
+    wheels[k].el.scrollTo({ top: v * IH, behavior: smooth ? "smooth" : "auto" });
+  }
+  function syncWheels() {
+    for (const k in wheels) { wheels[k].el.scrollTop = pick[k] * IH; markWheel(k); }
+    paintStart();
+  }
+  for (const k in wheels) {
+    const w = wheels[k], frag = document.createDocumentFragment();
+    for (let i = 0; i <= w.max; i++) {
+      const d = document.createElement("div");
+      d.className = "wi"; d.textContent = pad(i); d.dataset.v = i;
+      frag.append(d);
+    }
+    w.el.append(frag);
+    w.items = [...w.el.children];
+    w.el.setAttribute("aria-valuemin", 0);
+    w.el.setAttribute("aria-valuemax", w.max);
+    let busy = false;
+    w.el.addEventListener("scroll", () => {
+      if (busy) return; busy = true;
+      requestAnimationFrame(() => {
+        busy = false;
+        if (w.el.offsetParent === null) return;
+        const v = Math.max(0, Math.min(w.max, Math.round(w.el.scrollTop / IH)));
+        if (v !== pick[k]) { pick[k] = v; markWheel(k); store.set("cd.pick", pick); paintStart(); }
+      });
+    }, { passive: true });
+    w.el.addEventListener("click", (e) => { const it = e.target.closest(".wi"); if (it) setPick(k, +it.dataset.v, true); });
+    w.el.addEventListener("keydown", (e) => {
+      const d = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
+      if (!d) return;
+      e.preventDefault();
+      setPick(k, (pick[k] + d + w.max + 1) % (w.max + 1), false);
+    });
+  }
+
+  /* ---------- presets ---------- */
+  const PRESETS = [1, 3, 5, 10, 25, 60];
+  const pre = $("#presets");
+  PRESETS.forEach((min) => {
+    const b = document.createElement("button");
+    b.className = "preset"; b.type = "button";
+    b.innerHTML = min >= 60 ? `<b>${min / 60}</b>小時` : `<b>${min}</b>分`;
+    b.setAttribute("aria-label", `立刻開始 ${min >= 60 ? min / 60 + " 小時" : min + " 分鐘"}`);
+    b.addEventListener("click", () => {
+      pick = { h: Math.floor(min / 60), m: min % 60, s: 0 }; store.set("cd.pick", pick);
+      start(min * 60000);
+    });
+    pre.append(b);
+  });
+
+  /* ---------- dial ---------- */
+  const N = 120, NS = "http://www.w3.org/2000/svg";
+  const tg = $("#ticks"), ticks = [];
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2 - Math.PI / 2, major = i % 10 === 0;
+    const r1 = major ? 134 : 138, r2 = 146;
+    const l = document.createElementNS(NS, "line");
+    l.setAttribute("x1", (150 + Math.cos(a) * r1).toFixed(2));
+    l.setAttribute("y1", (150 + Math.sin(a) * r1).toFixed(2));
+    l.setAttribute("x2", (150 + Math.cos(a) * r2).toFixed(2));
+    l.setAttribute("y2", (150 + Math.sin(a) * r2).toFixed(2));
+    l.setAttribute("class", major ? "tk major" : "tk");
+    tg.append(l); ticks.push(l);
+  }
+  const arc = $("#arc"), C = 2 * Math.PI * 124;
+  arc.style.strokeDasharray = C.toFixed(2);
+
+  /* ---------- timer state ---------- */
+  const T = Object.assign({ state: "idle", total: 0, endAt: 0, remaining: 0, doneAt: 0 }, store.get("cd.timer", {}));
+  const saveT = () => store.set("cd.timer", T);
+  const vRun = $("#v-run"), vSetup = $("#v-setup");
+  const tEl = $("#r-time"), sEl = $("#r-state"), subEl = $("#r-sub");
+  let lastLit = -1, lastTick = -1, raf = 0;
+
+  function render() {
+    const now = Date.now();
+    let left = T.state === "running" ? T.endAt - now : T.state === "paused" ? T.remaining : 0;
+    left = Math.max(0, left);
+    const frac = T.total > 0 ? Math.min(1, left / T.total) : 0;
+    const secs = Math.ceil(left / 1000);
+    const long = T.total >= 3600000;
+
+    vRun.classList.toggle("paused", T.state === "paused");
+    vRun.classList.toggle("done", T.state === "done");
+    vRun.classList.toggle("final", T.state === "running" && secs <= 10);
+
+    arc.style.strokeDashoffset = (C * (1 - frac)).toFixed(2);
+    const lit = Math.ceil(frac * N);
+    if (lit !== lastLit) { ticks.forEach((t, i) => t.classList.toggle("on", i < lit)); lastLit = lit; }
+
+    tEl.classList.toggle("long", long);
+    const txt = fmt(T.state === "done" ? 0 : secs, long);
+    if (tEl.textContent !== txt) {
+      tEl.textContent = txt;
+      if (T.state === "running" && secs > 0 && secs <= 3 && secs !== lastTick) { lastTick = secs; tick(); }
+    }
+    sEl.textContent = { running: "剩餘", paused: "已暫停", done: "時間到" }[T.state] || "";
+    subEl.textContent =
+      T.state === "running" ? `${clock(T.endAt)} 結束` :
+      T.state === "paused" ? `共 ${fmtDur(T.total)}` :
+      T.state === "done" ? `已超過 ${fmt(Math.floor((now - T.doneAt) / 1000), false)}` : "";
+    $("#btn-pause").textContent = T.state === "running" ? "暫停" : T.state === "paused" ? "繼續" : "再一次";
+    $("#btn-reset").textContent = T.state === "done" ? "停止" : "重設";
+    document.title = T.state === "done" ? `時間到 · ${APP}` : (T.state === "running" || T.state === "paused") ? `${txt} · ${APP}` : APP;
+  }
+
+  function frame() {
+    if (T.state === "running" && T.endAt - Date.now() <= 0) finish();
+    render();
+    if (T.state === "running" || T.state === "done") raf = requestAnimationFrame(frame);
+  }
+  function loop() { cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); }
+  // Background check: rAF stops in hidden tabs, so this catches the finish.
+  setInterval(() => { if (T.state === "running" && T.endAt - Date.now() <= 0) { finish(); render(); } }, 250);
+
+  function showRun() { vSetup.hidden = true; vRun.hidden = false; lastLit = -1; render(); loop(); }
+  function showSetup() { vRun.hidden = true; vSetup.hidden = false; requestAnimationFrame(syncWheels); document.title = APP; }
+
+  function start(ms) {
+    if (ms <= 0) return;
+    audio(); stopAlarm();
+    Object.assign(T, { state: "running", total: ms, endAt: Date.now() + ms, remaining: ms, doneAt: 0 });
+    lastTick = -1; saveT(); lockOn(); showRun();
+  }
+  function pause() { T.remaining = Math.max(0, T.endAt - Date.now()); T.state = "paused"; saveT(); lockOff(); render(); }
+  function resume() { audio(); T.endAt = Date.now() + T.remaining; T.state = "running"; saveT(); lockOn(); loop(); }
+  function finish() { T.state = "done"; T.doneAt = T.endAt; T.remaining = 0; saveT(); lockOff(); startAlarm(); }
+  function reset() { stopAlarm(); cancelAnimationFrame(raf); T.state = "idle"; saveT(); lockOff(); showSetup(); }
+  function addMinute() {
+    audio();
+    if (T.state === "running") { T.endAt += 60000; T.total += 60000; }
+    else if (T.state === "paused") { T.remaining += 60000; T.total += 60000; }
+    else if (T.state === "done") { start(60000); return; }
+    lastTick = -1; saveT(); render();
+  }
+
+  $("#btn-start").addEventListener("click", () => start(pickMs()));
+  $("#btn-pause").addEventListener("click", () => {
+    if (T.state === "running") pause();
+    else if (T.state === "paused") resume();
+    else if (T.state === "done") start(T.total);
+  });
+  $("#btn-reset").addEventListener("click", reset);
+  $("#btn-plus").addEventListener("click", addMinute);
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && T.state === "running") { lockOn(); loop(); }
+  });
+
+  /* ---------- countdown days ---------- */
+  const WD = "日一二三四五六";
+  let events = store.get("cd.events", null);
+  if (!Array.isArray(events)) {
+    events = [
+      { id: "s1", name: "聖誕節", date: "2026-12-25", time: "", sample: true },
+      { id: "s2", name: "2027 新年", date: "2027-01-01", time: "", sample: true },
+      { id: "s3", name: "農曆新年", date: "2027-02-06", time: "", sample: true },
+    ];
+  }
+  const saveEv = () => store.set("cd.events", events);
+  function target(ev) {
+    const [y, mo, d] = ev.date.split("-").map(Number);
+    const [hh, mm] = (ev.time || "00:00").split(":").map(Number);
+    return new Date(y, mo - 1, d, hh || 0, mm || 0).getTime();
+  }
+  function dayDiff(ts) {
+    const a = new Date(ts); a.setHours(0, 0, 0, 0);
+    const b = new Date(); b.setHours(0, 0, 0, 0);
+    return Math.round((a - b) / 86400000);
+  }
+  function dateLabel(ev) {
+    const d = new Date(target(ev));
+    return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}（${WD[d.getDay()]}）${ev.time ? " " + ev.time : ""}`;
+  }
+  const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  let heroEv = null;
+  function renderEvents() {
+    const now = Date.now();
+    const withT = events.map((e) => ({ e, t: target(e) }));
+    const up = withT.filter((x) => x.t > now).sort((a, b) => a.t - b.t);
+    const past = withT.filter((x) => x.t <= now).sort((a, b) => b.t - a.t);
+    heroEv = up[0] || null;
+
+    const hero = $("#ev-hero");
+    if (heroEv) {
+      hero.className = "hero";
+      hero.innerHTML = `<p class="eyebrow">最近的日子</p><h2>${esc(heroEv.e.name)}</h2><p class="when">${dateLabel(heroEv.e)}</p>
+        <div class="units"><div class="u"><b id="hu-d">0</b><span>天</span></div><div class="u"><b id="hu-h">00</b><span>時</span></div><div class="u"><b id="hu-m">00</b><span>分</span></div><div class="u"><b id="hu-s">00</b><span>秒</span></div></div>`;
+      tickHero();
+    } else {
+      hero.className = "hero empty";
+      hero.innerHTML = `<p class="eyebrow">最近的日子</p><h2>還沒有要倒數的日子</h2><p>在下方輸入名稱和日期，就會開始倒數。</p>`;
+    }
+
+    const list = $("#ev-list");
+    if (!events.length) { list.innerHTML = `<li class="ev-none">清單是空的。</li>`; return; }
+    list.innerHTML = [...up, ...past].map(({ e, t }) => {
+      const dd = dayDiff(t);
+      const cls = t <= now && dd < 0 ? "past" : dd === 0 ? "today" : "";
+      const days = dd > 0 ? `<b>${dd}</b>天後` : dd === 0 ? (t > now ? `<b>今天</b>` : `<b>今天</b>到了`) : `已過<b>${-dd}</b>天`;
+      return `<li class="ev ${cls}" data-id="${esc(e.id)}">
+        <div class="ev-main"><div class="ev-name">${esc(e.name)}${e.sample ? '<span class="chip">範例</span>' : ""}</div><div class="ev-date">${dateLabel(e)}</div></div>
+        <div class="ev-days">${days}</div>
+        <button class="ev-del" type="button" aria-label="刪除 ${esc(e.name)}">×</button></li>`;
+    }).join("");
+  }
+  function tickHero() {
+    if (!heroEv) return;
+    const left = heroEv.t - Date.now();
+    if (left <= 0) { renderEvents(); return; }
+    const s = Math.floor(left / 1000);
+    const set = (id, v) => { const el = document.getElementById(id); if (el && el.textContent !== v) el.textContent = v; };
+    set("hu-d", String(Math.floor(s / 86400)));
+    set("hu-h", pad(Math.floor((s % 86400) / 3600)));
+    set("hu-m", pad(Math.floor((s % 3600) / 60)));
+    set("hu-s", pad(s % 60));
+  }
+  let lastDay = new Date().getDate();
+  setInterval(() => {
+    if ($("#tab-events").hidden) return;
+    if (new Date().getDate() !== lastDay) { lastDay = new Date().getDate(); renderEvents(); } else tickHero();
+  }, 1000);
+
+  $("#ev-list").addEventListener("click", (e) => {
+    const b = e.target.closest(".ev-del"); if (!b) return;
+    const li = b.closest(".ev"), id = li.dataset.id;
+    if (!b.classList.contains("armed")) {
+      b.classList.add("armed"); b.textContent = "確定刪除";
+      setTimeout(() => { if (b.isConnected) { b.classList.remove("armed"); b.textContent = "×"; } }, 3000);
+      return;
+    }
+    const ev = events.find((x) => x.id === id);
+    events = events.filter((x) => x.id !== id); saveEv(); renderEvents();
+    if (ev) toast(`已刪除「${ev.name}」`);
+  });
+
+  $("#ev-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = $("#ev-name").value.trim(), date = $("#ev-date").value, time = $("#ev-time").value;
+    if (!name || !date) { toast("請填名稱和日期"); return; }
+    events.push({ id: Date.now().toString(36), name, date, time });
+    saveEv(); renderEvents(); e.target.reset();
+    toast(`已新增「${name}」`);
+  });
+
+  /* ---------- tabs ---------- */
+  function showTab(name) {
+    if (name !== "events") name = "timer";
+    document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.tab === name)));
+    $("#tab-timer").hidden = name !== "timer";
+    $("#tab-events").hidden = name !== "events";
+    $("#main").scrollTop = 0;
+    if (name === "timer" && T.state === "idle") requestAnimationFrame(syncWheels);
+    if (name === "events") renderEvents();
+  }
+  document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => {
+    const name = t.dataset.tab;
+    try { history.replaceState(null, "", "#" + name); } catch {}
+    showTab(name);
+  }));
+  window.addEventListener("hashchange", () => showTab(location.hash.slice(1)));
+
+  /* ---------- boot ---------- */
+  if (T.state === "running" && T.endAt <= Date.now()) {
+    T.state = "done"; T.doneAt = T.endAt; saveT();
+    if (Date.now() - T.doneAt < 60000) startAlarm();
+  }
+  showTab(location.hash.slice(1));
+  if (T.state === "running" || T.state === "paused" || T.state === "done") {
+    showRun(); if (T.state === "running") lockOn();
+  } else showSetup();
+})();
+</script>
+<!--/APP-BODY-->
+</body>
+</html>
