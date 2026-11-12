@@ -541,7 +541,6 @@
     const txt = fmt(T.state === "done" ? 0 : secs, long);
     if (tEl.textContent !== txt) {
       tEl.textContent = txt;
-      if (T.state === "running" && secs > 0 && secs <= 3 && secs !== lastTick) { lastTick = secs; tick(); }
     }
     sEl.textContent = { running: "剩餘", paused: "已暫停", done: "時間到" }[T.state] || "";
     subEl.textContent =
