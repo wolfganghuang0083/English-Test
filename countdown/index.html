@@ -143,10 +143,8 @@
   html[data-fx="rainbow"] {
     background: linear-gradient(90deg, #FF2D55, #FF7A00, #F2B600, #22B14C, #00A8B5, #0A6CFF, #9B4DDB, #FF2D55);
     background-size: 200% 100%;
-    animation: bgflow 3s linear infinite;
   }
   html[data-fx="done"] { background: var(--alarm); animation: alarmflash 1s steps(1) infinite; }
-  @keyframes bgflow { to { background-position: 200% 0; } }
   @keyframes alarmflash { 50% { background: #000; } }
   html[data-fx] .top h1, html[data-fx] .r-time, html[data-fx] .r-state, html[data-fx] .r-sub { color: #fff; }
   html[data-fx] .mark { border-color: #fff; }
@@ -354,16 +352,19 @@
     o.start(at); o.stop(at + dur + 0.03);
   }
   function tick() { if (soundOn && audio()) tone(1320, ac.currentTime, 0.07, 0.12); }
-  function chime() { if (soundOn && audio()) { const t = ac.currentTime; [0, 0.16, 0.32].forEach((d) => tone(988, t + d, 0.12, 0.3)); } }
-  let alarmI = 0, alarmT = 0;
+  // A single bell-like "ding": fundamental plus two quickly fading overtones.
+  function ding() {
+    if (!soundOn || !audio()) return;
+    const t = ac.currentTime + 0.02;
+    tone(1318.5, t, 1.8, 0.35);
+    tone(2637, t, 0.7, 0.12);
+    tone(3955, t, 0.3, 0.05);
+  }
   function startAlarm() {
-    stopAlarm(); chime();
-    alarmI = setInterval(chime, 1100);
-    alarmT = setTimeout(stopAlarm, 60000);
-    try { navigator.vibrate && navigator.vibrate([300, 150, 300, 150, 300]); } catch {}
+    ding();
+    try { navigator.vibrate && navigator.vibrate(250); } catch {}
   }
   function stopAlarm() {
-    clearInterval(alarmI); clearTimeout(alarmT); alarmI = 0;
     try { navigator.vibrate && navigator.vibrate(0); } catch {}
   }
   function paintSound() {
@@ -489,6 +490,21 @@
   const arc = $("#arc"), C = 2 * Math.PI * 124;
   const appEl = $(".app"), rootEl = document.documentElement;
   let fxMode = "";
+  // Rainbow loop time shrinks from about 4 s (39 s left) to 0.35 s (0 s left).
+  let flowPhase = 0, flowLast = 0;
+  function flowRainbow(left) {
+    if (rootEl.dataset.fx !== "rainbow") {
+      if (flowLast) { rootEl.style.backgroundPosition = ""; flowLast = 0; }
+      return;
+    }
+    const now = performance.now();
+    const dt = flowLast ? Math.min(0.1, (now - flowLast) / 1000) : 0;
+    flowLast = now;
+    const f = Math.max(0, Math.min(1, left / 39000));
+    const period = 0.35 + 3.65 * Math.pow(f, 1.4);
+    flowPhase = (flowPhase + dt / period) % 1;
+    rootEl.style.backgroundPosition = `${(flowPhase * 200).toFixed(2)}% 0`;
+  }
   function applyFx() {
     const m = appEl.classList.contains("is-run") ? fxMode : "";
     if ((rootEl.dataset.fx || "") !== m) { if (m) rootEl.dataset.fx = m; else delete rootEl.dataset.fx; }
@@ -515,6 +531,7 @@
     const live = T.state === "running" || T.state === "paused";
     fxMode = T.state === "done" ? "done" : live && secs <= 39 ? "rainbow" : live && secs <= 60 ? "red" : "";
     applyFx();
+    flowRainbow(left);
 
     arc.style.strokeDashoffset = (C * (1 - frac)).toFixed(2);
     const lit = Math.ceil(frac * N);
@@ -539,7 +556,7 @@
   function frame() {
     if (T.state === "running" && T.endAt - Date.now() <= 0) finish();
     render();
-    if (T.state === "running" || T.state === "done") raf = requestAnimationFrame(frame);
+    if (T.state === "running" || T.state === "done" || (T.state === "paused" && fxMode === "rainbow")) raf = requestAnimationFrame(frame);
   }
   function loop() { cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); }
   // Background check: rAF stops in hidden tabs, so this catches the finish.
@@ -555,7 +572,7 @@
     Object.assign(T, { state: "running", total: ms, endAt: Date.now() + ms, remaining: ms, doneAt: 0 });
     lastTick = -1; saveT(); lockOn(); showRun();
   }
-  function pause() { T.remaining = Math.max(0, T.endAt - Date.now()); T.state = "paused"; saveT(); lockOff(); render(); }
+  function pause() { T.remaining = Math.max(0, T.endAt - Date.now()); T.state = "paused"; saveT(); lockOff(); render(); loop(); }
   function resume() { audio(); T.endAt = Date.now() + T.remaining; T.state = "running"; saveT(); lockOn(); loop(); }
   function finish() { T.state = "done"; T.doneAt = T.endAt; T.remaining = 0; saveT(); lockOff(); startAlarm(); }
   function reset() { stopAlarm(); cancelAnimationFrame(raf); T.state = "idle"; saveT(); lockOff(); showSetup(); }
