@@ -546,7 +546,30 @@ movie/film | 電影</pre>
 <div class="toast" id="toast"></div>
 <div id="updateBar" hidden style="position:fixed;top:0;left:0;right:0;z-index:9;background:var(--accent);color:var(--accent-ink);text-align:center;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:700;cursor:pointer">🔄 有新版本，點這裡更新</div>
 
-<script>window.APP_VERSION = '2026-11-07.2';</script>
+<script>window.APP_VERSION = '2026-11-24.1';
+// 出錯時在畫面最上方顯示原因和「重新整理」，不會看起來像當機（主程式整個載入失敗也看得到）
+(function(){
+  var shown = false;
+  function bar(msg){
+    if (shown || !document.body) return; shown = true;
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99;background:#c62828;color:#fff;padding:calc(10px + env(safe-area-inset-top)) 14px 10px;font:14px/1.5 -apple-system,sans-serif';
+    d.innerHTML = '⚠️ 程式發生錯誤，請按「重新整理」；如果一直出現，請把這個畫面截圖給管理者。<br><small style="opacity:.85"></small><br>';
+    d.querySelector('small').textContent = String(msg).slice(0, 200) + '（版本 ' + window.APP_VERSION + '）';
+    var b = document.createElement('button');
+    b.textContent = '🔄 重新整理';
+    b.style.cssText = 'margin-top:8px;padding:8px 16px;border:0;border-radius:10px;background:#fff;color:#c62828;font-weight:700;font-size:15px';
+    b.onclick = function(){ location.replace(location.pathname + '?v=' + Date.now()); };
+    d.appendChild(b); document.body.appendChild(d);
+  }
+  window.addEventListener('error', function(e){ if (e && e.message) bar(e.message + (e.lineno ? ' @' + e.lineno : '')); });
+  window.addEventListener('unhandledrejection', function(e){
+    var r = e && e.reason; var m = (r && (r.message || r)) || '';
+    if (/AbortError|aborted|NotAllowedError|Load failed|Failed to fetch|NetworkError/i.test(String(m) + (r && r.name))) return;   // 網路斷線之類不算程式錯誤
+    bar(m);
+  });
+})();
+</script>
 <script src="config.js"></script>
 <script>
 'use strict';
@@ -675,6 +698,15 @@ const TYPES = {
   sent:   {label:'整句翻譯', desc:'看／聽中文句子，說出英文'}
 };
 
+// 清理英文欄：去掉複製時夾帶的看不見字元、詞性標記（(n.)、adj.、prep.…）和結尾的 …
+const INVISIBLE = /[\u200b-\u200f\u2060\ufeff\u00ad]/g;
+const POS_WORDS = '(?:n|v|vt|vi|adj|adv|a|prep|conj|pron|phr|ph|aux|int|art|num|det)';
+function cleanEn(s){
+  return String(s).replace(INVISIBLE, '')
+    .replace(new RegExp('\\(' + POS_WORDS + '\\.?\\)', 'gi'), '')
+    .replace(new RegExp('(?:\\s+' + POS_WORDS + '\\.)+(?=\\s*(?:[…\\.]+)?\\s*$)', 'gi'), '')
+    .replace(/\s*[…]+\s*$/, '').replace(/\s+/g, ' ').trim();
+}
 /* ---------------- 儲存 ---------------- */
 const store = {
   get(k, d){ try{ const v = localStorage.getItem('evq_'+k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
@@ -760,7 +792,7 @@ function parseBank(text){
     const star = /^[✓✔☑★*]/.test(line);
     if (star) line = line.replace(/^[✓✔☑★*]+\s*/, '');
     const parts = splitLine(line).map(s => s.trim());
-    let first = (parts[0] || '').replace(/\((?:n|v|vt|vi|adj|adv|a|prep|conj|pron|phr|ph|aux)\.?\)/gi, '').replace(/\s+/g, ' ').trim();
+    let first = cleanEn(parts[0] || '');
     const zh = parts[1] || '';
     const sentence = (parts[2] || '').trim();
     if (!/[A-Za-z]/.test(first)){ skipped.push(idx + 1); return; }
@@ -796,10 +828,25 @@ function norm(s){
   return String(s).toLowerCase().replace(/[’‘`´]/g, "'").replace(/[^a-z0-9'\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 function forms(s){
-  const n = norm(s);
-  let e = n; for (const [re, r] of CONTRACTIONS) e = e.replace(re, r);
-  e = e.replace(/\s+/g, ' ').trim();
-  return [n, e, n.replace(/'/g, ''), e.replace(/'/g, '')];
+  const base = (x) => {
+    const n = norm(x);
+    let e = n; for (const [re, r] of CONTRACTIONS) e = e.replace(re, r);
+    e = e.replace(/\s+/g, ' ').trim();
+    return [n, e, n.replace(/'/g, ''), e.replace(/'/g, '')];
+  };
+  const raw = String(s).replace(INVISIBLE, '');
+  const out = base(raw);
+  // 片語裡的代稱：be sure to + V／It is time for N／talk ~ into Ving／sb、sth → 寫不寫都算對
+  const PH = /(?:^|\s)(?:\+\s*)?(?:sb|sth|somebody|something|someone|N|V|Ving|V-ing|VR|adj|O|one's|~|～|…)(?=\s|$)|\+/g;
+  const strip = x => x.replace(PH, ' ').replace(/\s+/g, ' ').trim();
+  const stripped = strip(raw);
+  if (stripped && stripped !== raw) out.push(...base(stripped));
+  // 括號：follow (obey) the rules → follow the rules 或 obey the rules 都算對
+  if (/\(([^)]+)\)/.test(raw)){
+    out.push(...base(strip(raw.replace(/\s*\([^)]*\)/g, ' '))));
+    out.push(...base(strip(raw.replace(/\S+\s*\(([^)]+)\)/, '$1'))));
+  }
+  return out.filter(Boolean);
 }
 function matches(input, answers){
   const fi = forms(input).filter(Boolean);
@@ -1783,7 +1830,6 @@ async function docxBlocks(file){
 }
 const HAS_CJK = /[㐀-鿿]/, HAS_LATIN = /[A-Za-z]/;
 const UNIT_LINE = /^(unit|lesson|chapter|part|week|review|module)\s*\d+\b[^|]{0,30}$|^第\s*[\d一二三四五六七八九十]+\s*[課單元週章冊回][^|]{0,20}$/i;
-const cleanEn = s => s.replace(/\((?:n|v|vt|vi|adj|adv|a|prep|conj|pron|phr|ph|aux)\.?\)/gi, '').replace(/\s+/g, ' ').trim();
 // 把表格列（Word 表格、CSV）整理成題庫：會自動找「英文／中文／例句」欄位
 function rowsToBank(blocks){
   const lines = [], groups = [];
