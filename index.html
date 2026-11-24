@@ -546,7 +546,7 @@ movie/film | 電影</pre>
 <div class="toast" id="toast"></div>
 <div id="updateBar" hidden style="position:fixed;top:0;left:0;right:0;z-index:9;background:var(--accent);color:var(--accent-ink);text-align:center;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;font-weight:700;cursor:pointer">🔄 有新版本，點這裡更新</div>
 
-<script>window.APP_VERSION = '2026-11-24.1';
+<script>window.APP_VERSION = '2026-11-24.2';
 // 出錯時在畫面最上方顯示原因和「重新整理」，不會看起來像當機（主程式整個載入失敗也看得到）
 (function(){
   var shown = false;
@@ -717,7 +717,7 @@ const DEFAULTS = {types:['zh2en','listen','cloze'], prompt:'both', count:'10', r
 let settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
 let bankText = store.get('bankText', null);   // 單機模式的題庫；登入雲端後改用每個帳號自己的暫存（見 bankKey）
 if (bankText == null || bankText.startsWith('# 英文單字小考｜範例題庫')) bankText = SAMPLE;  // 舊範例換成 80 字題庫
-let bank = parseBank(bankText);
+let bank = {items: [], skipped: []};   // 等整個程式載入完（startApp）才解析題庫：解析用到的設定定義在後面，太早解析會讓整個網頁停住
 let quiz = null;
 
 const $ = s => document.querySelector(s);
@@ -1475,6 +1475,7 @@ $('#saveCloud').addEventListener('click', () => saveBankCloud());
 function startApp(){
   if (session && session.mode === 'cloud' && !API) session = null;   // 雲端設定被移除
   if (API) store.del('bankText');   // 舊版把整份題庫存在共用的位置，清掉避免其他孩子看到
+  loadBankCache();
   if (!session) return showLogin();
   afterLogin();
   loadFromHash();
